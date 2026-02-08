@@ -269,7 +269,9 @@ public class WorkloadParser {
                         "{\"command\":\"delete\",\"id\":%s,\"name\":\"%s\",\"price\":%s,\"quantity\":%s}",
                         "invalid-info", "invalid-info", "invalid-info", "invalid-info"
                 );
-                return;
+                // Issue: did not call the sendPostRequest
+                sendPostRequest("/product", json1);
+              return;
             }
             String json = String.format(
                     "{\"command\":\"delete\",\"id\":%s,\"name\":\"%s\",\"price\":%s,\"quantity\":%s}",
