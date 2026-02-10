@@ -63,7 +63,21 @@ public class WorkloadParser {
             if(line.startsWith("[")){
                 line = line.substring(line.indexOf("]")+1).trim();
             }
+
+            if(line.equalsIgnoreCase("restart")){
+                sendPostRequest("/restart","{}");
+                continue;
+            }
+            if(line.equalsIgnoreCase("shutdown")){
+                sendPostRequest("/shutdown", "{}");
+                continue;
+            }
+
+
             String[] parts = line.split("\\s+"); // split by any whitespace
+            if(parts.length <2){
+                continue;
+            }
             String service = parts[0]; // USER, PRODUCT, or ORDER
             String command = parts[1]; // create get, update, delete or place order
 
@@ -140,6 +154,8 @@ public class WorkloadParser {
                     sendPostRequest("/user", json_builder.toString());
                 }
 
+            }else if (command.equals("purchased")){
+                sendGetRequest("/user/purchased/" + parts[2]);
             }
 
         }

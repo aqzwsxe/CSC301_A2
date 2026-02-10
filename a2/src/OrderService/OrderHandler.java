@@ -1,9 +1,11 @@
 package OrderService;
 
 import Utils.ConfigReader;
+import Utils.PersistenceManager;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URI;
@@ -11,6 +13,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,6 +31,8 @@ public class OrderHandler implements HttpHandler {
      * The HTTP client used for backend.
      */
     private final HttpClient client;
+
+    private static boolean isFirstRequest = true;
 
 
     /**
@@ -68,8 +73,43 @@ public class OrderHandler implements HttpHandler {
         System.out.println("method "+ method);
         System.out.println("The bodyString: "+ bodyString);
         try {
+            // Startup logic
+            if(isFirstRequest){
+                isFirstRequest = false;
+                if(path.equals("/restart")){
+                    OrderService.orderDatabase = PersistenceManager.loadServiceData("order.ser",Order.id_counter);
+                    sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
+                    return;
+                } else {
+                    new File("order.ser").delete();
+                    signalInternalServices("clear");
+                }
+            }
+
+            if(path.equals("/shutdown")){
+                PersistenceManager.saveServiceData("order.ser",OrderService.orderDatabase, Order.id_counter);
+                signalInternalServices("shutdown");
+                sendResponse(exchange, 200, "{\"status\": \"Shutting down\"}".getBytes());
+
+                new Thread(()->{
+                    try{
+                        Thread.sleep(500);
+                    }catch (Exception ignored){
+
+                    }
+                    System.exit(0);
+                }).start();
+                return;
+            }
+
             if(method.equalsIgnoreCase("GET") && path.startsWith("/order/")){
-                handleGetOrder(exchange,path);
+                if(path.startsWith("/user/purchased/")){
+                    handleUserPurchased(exchange,path);
+                    return;
+                }else if(path.startsWith("/order/")){
+                    handleGetOrder(exchange, path);
+                    return;
+                }
             }else if(method.equalsIgnoreCase("DELETE")&& path.startsWith("/order/")){
                 handleCancelOrder(exchange, path);
             } else if(method.equalsIgnoreCase("POST") && path.startsWith("/order")  && bodyString.contains("place order")){
@@ -358,6 +398,75 @@ public class OrderHandler implements HttpHandler {
             value = value.substring(1,value.length()-1);
         }
         return value;
+    }
+
+
+    private void handleUserPurchased(HttpExchange exchange, String path) throws IOException {
+        String[] parts = path.split("/");
+        if(parts.length < 4){
+            sendError(exchange, 400, "Invalid User ID");
+            return;
+        }
+
+        try {
+            String userIdStr = parts[3];
+            int userId = Integer.parseInt(userIdStr);
+
+            if(!userExists(userIdStr)){
+                sendError(exchange, 404, "User Not Found");
+                return;
+            }
+            // Aggregate purchases
+            Map<Integer, Integer> purchases = new HashMap<>();
+            for(Order order : OrderService.orderDatabase.values()){
+                if(order.getUser_id() ==userId && "Success".equals(order.getStatus())){
+                    purchases.merge(order.getProduct_id(), order.getQuantity(), Integer::sum);
+                }
+
+            }
+           StringBuilder json = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<Integer, Integer> entry : purchases.entrySet()){
+                if(!first){
+                    json.append(", ");
+                }
+                json.append(String.format("\"%d\": %d", entry.getKey(), entry.getValue()));
+                first = false;
+            }
+            json.append("}");
+            sendResponse(exchange, 200, json.toString().getBytes());
+        }catch (NumberFormatException e){
+            sendError(exchange, 400, "Invalid ID format");
+        }catch (Exception e){
+            sendError(exchange, 500, "Internal Server Error");
+        }
+    }
+
+    private boolean userExists(String userId){
+        try {
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/user/" + userId)).GET().build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            return response.statusCode() == 200;
+        } catch (IOException | InterruptedException e) {
+            return false;
+        }
+    }
+
+    private void signalInternalServices(String command){
+        String[] internalRoutes = {"/user/internal/" + command, "/product/internal/"+ command};
+
+        for(String route: internalRoutes){
+            try {
+                // Don't necessarily need to wait for a complex response, just ensure the message is sent
+                HttpRequest request = HttpRequest.newBuilder().
+                        uri(URI.create(iscsUrl + route)).
+                        POST(HttpRequest.BodyPublishers.noBody()).build();
+                client.send(request, HttpResponse.BodyHandlers.discarding());
+                System.out.println("Signaled " + route + " with command: " + command );
+            } catch (Exception e) {
+                System.err.println("Failed to signal " + route + ": " + e.getMessage());
+            }
+        }
     }
 
 
