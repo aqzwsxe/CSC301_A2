@@ -391,6 +391,15 @@ public class ProductHandler implements HttpHandler {
             sendResponse(exchange, 404, errorResponse);
             return;
         }
+
+        String nameValue = getJsonValue(body, "name");
+
+        // Check if name is missing (null) OR the explicit "invalid-info" signal
+        if (nameValue == null || nameValue.equals("invalid-info")) {
+            sendResponse(exchange, 400, errorResponse);
+            return;
+        }
+
         // check if this is an invalid json file
         if(getJsonValue(body, "name").equals("invalid-info")) {
             sendResponse(exchange, 400, errorResponse);
