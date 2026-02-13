@@ -102,7 +102,7 @@ public class OrderHandler implements HttpHandler {
                 return;
             }
 
-            if(method.equalsIgnoreCase("GET") && path.startsWith("/order/")){
+            if(method.equalsIgnoreCase("GET") ){
                 if(path.startsWith("/user/purchased/")){
                     handleUserPurchased(exchange,path);
                     return;
@@ -424,17 +424,8 @@ public class OrderHandler implements HttpHandler {
                 }
 
             }
-           StringBuilder json = new StringBuilder("{");
-            boolean first = true;
-            for (Map.Entry<Integer, Integer> entry : purchases.entrySet()){
-                if(!first){
-                    json.append(", ");
-                }
-                json.append(String.format("\"%d\": %d", entry.getKey(), entry.getValue()));
-                first = false;
-            }
-            json.append("}");
-            sendResponse(exchange, 200, json.toString().getBytes());
+            String jsonResponse = mapToJson(purchases);
+            sendResponse(exchange, 200, jsonResponse.getBytes(StandardCharsets.UTF_8));
         }catch (NumberFormatException e){
             sendError(exchange, 400, "Invalid ID format");
         }catch (Exception e){
@@ -467,6 +458,26 @@ public class OrderHandler implements HttpHandler {
                 System.err.println("Failed to signal " + route + ": " + e.getMessage());
             }
         }
+    }
+
+
+
+    public String mapToJson(Map<Integer, Integer> map){
+        if(map.isEmpty()){
+            return "{}";
+        }
+        StringBuilder builder = new StringBuilder("{");
+        boolean first = true;
+        for(Map.Entry<Integer, Integer> entry: map.entrySet()){
+            if(!first){
+                builder.append(", ");
+            }
+            builder.append(String.format("\"%d\": %d", entry.getKey(), entry.getValue()));
+            first = false;
+        }
+        builder.append("}");
+        return builder.toString();
+
     }
 
 
