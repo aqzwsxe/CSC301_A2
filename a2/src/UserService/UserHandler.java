@@ -1,7 +1,9 @@
 package UserService;
 
+import Utils.PersistenceManager;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import jdk.jshell.execution.Util;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -102,6 +104,7 @@ public class UserHandler implements HttpHandler {
             sendResponse(exchange, 400, "{}");
             return;
         }
+
         try {
             int id = Integer.parseInt(parts[2]);
             User user = UserService.userDatabase.get(id);
@@ -110,6 +113,12 @@ public class UserHandler implements HttpHandler {
                 sendResponse(exchange, 404, "{}");
                 return;
             }
+
+            if(path.contains("/user/purchased/")){
+                sendResponse(exchange, 200, user.purchasesToJson());
+                return;
+            }
+
             String hashed_password = hash_helper(user.getPassword());
             String res1 = String.format("{\n" +
                     "        \"id\": %d,\n" +
@@ -153,7 +162,36 @@ public class UserHandler implements HttpHandler {
         String command = getJsonValue(body, "command");
         String idStr = getJsonValue(body, "id");
         // this part handles create and delete and update
-        if(command==null || idStr == null || idStr.equals("invalid-info")){
+        if(command==null ){
+            sendResponse(exchange, 400, "{}");
+            return;
+        }
+
+        switch (command){
+            case "clear":
+                UserService.userDatabase.clear();
+                User.id_counter.set(0);
+                sendResponse(exchange, 200, "{}");
+                return;
+            case "restart":
+                UserService.userDatabase = Utils.PersistenceManager.loadServiceData("user.ser", User.id_counter);
+                sendResponse(exchange, 200, "{}");
+                return;
+            case  "shutdown":
+                PersistenceManager.saveServiceData("user.ser", UserService.userDatabase, User.id_counter);
+                sendResponse(exchange, 200, "{}");
+                new Thread(()->{try {Thread.sleep(200); System.exit(0);
+                } catch (Exception e) {
+
+                }
+                }).start();
+                return;
+            case "updatePurchase":
+                handleInternalPurchaseUpdate(exchange, body);
+                return;
+        }
+
+        if(idStr == null || idStr.equals("invalid-info")){
             sendResponse(exchange, 400, "{}");
             return;
         }
@@ -175,6 +213,25 @@ public class UserHandler implements HttpHandler {
                 sendResponse(exchange, 400, "{}");
                 return;
 
+        }
+
+    }
+
+    private void handleInternalPurchaseUpdate(HttpExchange exchange, String body) throws IOException{
+        try {
+            int userId = Integer.parseInt(getJsonValue(body, "user_id"));
+            int productId = Integer.parseInt(getJsonValue(body, "product_id"));
+            int quantity = Integer.parseInt(getJsonValue(body, "quantity"));
+
+            User user = UserService.userDatabase.get(userId);
+            if(user != null){
+                user.getPurchasedItems().merge(productId, quantity, Integer::sum);
+                sendResponse(exchange, 200, "{}");
+            }else{
+                sendResponse(exchange, 404, "{}");
+            }
+        }catch (Exception e){
+            sendResponse(exchange, 400, "{}");
         }
 
     }

@@ -49,10 +49,14 @@ public class PersistenceManager {
         }
 
         try(ObjectInputStream ois = new ObjectInputStream(new FileInputStream(file))) {
-            Map<K,V> data = (Map<K,V>) ois.readObject();
+            Object loadData = ois.readObject();
             int savedCounter = ois.readInt();
             counter.set(savedCounter);
-            return data;
+
+            if(loadData instanceof Map){
+                return new ConcurrentHashMap<>((Map<K, V>) loadData);
+            }
+            return new ConcurrentHashMap<>();
         } catch (Exception e) {
             System.err.println("Error loading data from " + filename+". starting fresh");
             return new ConcurrentHashMap<>();

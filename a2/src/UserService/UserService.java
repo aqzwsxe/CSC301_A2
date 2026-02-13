@@ -1,5 +1,6 @@
 package UserService;
 
+import Utils.PersistenceManager;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
@@ -22,7 +23,7 @@ public class UserService {
     /**
      * This is the database to store all the Users
      */
-    public static Map<Integer, User> userDatabase = new ConcurrentHashMap<>();
+    public static Map<Integer, User> userDatabase = PersistenceManager.loadServiceData("user.ser", User.id_counter);
 
     /**
      * The main execution point that starts the User microservice

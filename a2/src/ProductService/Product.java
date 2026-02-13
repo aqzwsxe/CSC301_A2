@@ -1,5 +1,8 @@
 package ProductService;
 
+import java.io.Serializable;
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * Represents a product with a unique id.
  *
@@ -12,7 +15,10 @@ package ProductService;
  *   <li>{@code quantity} always exists and positive.</li>
  * </ul>
  */
-public class Product {
+public class Product implements Serializable {
+    private static final long serialVersionUID = 1L;
+    public static AtomicInteger id_counter = new AtomicInteger(0);
+
     int pid;
     String name;
     String description;
@@ -120,7 +126,9 @@ public class Product {
      * @param quantity the product quantity; must be positive
      */
     public void setQuantity(int quantity) {
-        this.quantity_in_stock = quantity;
+        if(quantity >= 0){
+            this.quantity_in_stock = quantity;
+        }
     }
 
     /**

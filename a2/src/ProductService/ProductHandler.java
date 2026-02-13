@@ -1,5 +1,6 @@
 package ProductService;
 
+import Utils.PersistenceManager;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
@@ -105,6 +106,29 @@ public class ProductHandler implements HttpHandler {
                 sendResponse(exchange, 400, errorResponse);
                 return;
             }
+        }
+
+        switch (command){
+            case "clear":
+                ProductService.productDatabase.clear();
+                Product.id_counter.set(0);
+                sendResponse(exchange, 200, "{}\n");
+                return;
+            case "restart":
+                ProductService.productDatabase = PersistenceManager.loadServiceData("product.ser",Product.id_counter);
+                sendResponse(exchange,200,"{}\n");
+                return;
+            case "shutdown":
+                PersistenceManager.saveServiceData("product.ser",ProductService.productDatabase, Product.id_counter);
+                sendResponse(exchange, 200, "{}\n");
+                new Thread(()->{
+                    try {
+                        Thread.sleep(200);
+                        System.exit(0);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).start();
         }
 
         String idStr = getJsonValue(body, "id");

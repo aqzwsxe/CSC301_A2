@@ -1,5 +1,10 @@
 package UserService;
 
+import java.io.Serializable;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * Represents a user with a unique id.
  *
@@ -11,11 +16,17 @@ package UserService;
  *   <li>{@code password} always exists and non-empty.</li>
  * </ul>
  */
-public class User  {
+public class User implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+    public static AtomicInteger id_counter = new AtomicInteger(0);
+
     int id;
     String username;
     String email;
     String password;
+
+    private Map<Integer, Integer> purchasedItems;
 
     /**
      * Initializes a new User.
@@ -30,6 +41,24 @@ public class User  {
         this.username = username;
         this.email = email;
         this.password = password;
+        this.purchasedItems = new ConcurrentHashMap<>();
+    }
+
+    public Map<Integer, Integer> getPurchasedItems(){
+        return purchasedItems;
+    }
+
+    public String purchasesToJson(){
+        StringBuilder json = new StringBuilder("{");
+        int count = 0;
+        for (Map.Entry<Integer, Integer> entry : purchasedItems.entrySet()){
+            json.append(String.format("\"%d\":%d", entry.getKey(), entry.getValue()));
+            if(++count < purchasedItems.size()){
+                json.append(",");
+            }
+        }
+       json.append("}");
+        return json.toString();
     }
 
     /**
