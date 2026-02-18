@@ -14,7 +14,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>{@code id} always exists.</li>
  * </ul>
  */
-public class Order {
+public class Order implements java.io.Serializable {
+    private static final long serialVersionUID = 1L;
     /**
      * A thread-safe counter used to generate unique, sequential order IDs.
      */

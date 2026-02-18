@@ -3,8 +3,11 @@ package OrderService;
 import Utils.ConfigReader;
 import com.sun.net.httpserver.HttpServer;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpRequest;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -19,7 +22,7 @@ public class OrderService {
     /**
      * A database to store all the orders
      */
-    public static final Map<Integer, Order> orderDatabase = new ConcurrentHashMap<>();
+    public static Map<Integer, Order> orderDatabase = new ConcurrentHashMap<>();
 
     /**
      * The Main entry point for Order Service.

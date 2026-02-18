@@ -1,5 +1,6 @@
 package ProductService;
 
+import Utils.PersistenceManager;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
@@ -8,6 +9,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Handles the given product request and generates an appropriate response.
@@ -105,6 +107,29 @@ public class ProductHandler implements HttpHandler {
                 sendResponse(exchange, 400, errorResponse);
                 return;
             }
+        }
+
+        switch (command){
+            case "clear":
+                ProductService.productDatabase.clear();
+                Product.id_counter.set(0);
+                sendResponse(exchange, 200, "{}\n");
+                return;
+            case "restart":
+                ProductService.productDatabase = PersistenceManager.loadServiceData("product.ser",Product.id_counter);
+                sendResponse(exchange,200,"{}\n");
+                return;
+            case "shutdown":
+                PersistenceManager.saveServiceData("product.ser",ProductService.productDatabase, Product.id_counter);
+                sendResponse(exchange, 200, "{}\n");
+                new Thread(()->{
+                    try {
+                        Thread.sleep(200);
+                        System.exit(0);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).start();
         }
 
         String idStr = getJsonValue(body, "id");
@@ -391,6 +416,15 @@ public class ProductHandler implements HttpHandler {
             sendResponse(exchange, 404, errorResponse);
             return;
         }
+
+        String nameValue = getJsonValue(body, "name");
+
+        // Check if name is missing (null) OR the explicit "invalid-info" signal
+        if (nameValue == null || nameValue.equals("invalid-info")) {
+            sendResponse(exchange, 400, errorResponse);
+            return;
+        }
+
         // check if this is an invalid json file
         if(getJsonValue(body, "name").equals("invalid-info")) {
             sendResponse(exchange, 400, errorResponse);

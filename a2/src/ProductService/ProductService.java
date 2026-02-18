@@ -1,5 +1,6 @@
 package ProductService;
 
+import Utils.PersistenceManager;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
@@ -17,7 +18,7 @@ public class ProductService {
     /**
      * This is the database to store all the products
      */
-    public static Map<Integer, Product> productDatabase = new ConcurrentHashMap<>();
+    public static Map<Integer, Product> productDatabase = PersistenceManager.loadServiceData("product.ser",Product.id_counter);
 
     /**
      * The main execution point for the Product microservice
@@ -48,7 +49,7 @@ public class ProductService {
             server.createContext("/product", new ProductHandler());
             // Determines how the ProductServer handle concurrent requests;
             // Executor: decide
-            server.setExecutor(null);
+            server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
             server.start();
             System.out.println("ProductService is listening on port " + port);
         } catch (IOException e){

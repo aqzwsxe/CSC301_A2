@@ -1,0 +1,23 @@
+# Ensure User 1009 and Products exist
+# Run the workloadUser1 and workloadProduct1 before this file
+
+# User 1009 making multiple purchases
+# Purchase 1: 5 units of product 2011
+ORDER place 2011 1009 5
+# Purchase 2: 2 units of product 2013
+ORDER place 2013 1009 2
+# Purchase 3: 4 more units of product 2011 (Total for 2011 should become 9)
+ORDER place 2011 1009 4
+
+# Aggregated Purchase History
+# Test Case: Aggregated history for User 1009
+# Expected: 200 OK | Body: {"2011": 9, "2013": 2}
+GET /user/purchased/1009
+
+# Test Case: User exists but has no purchases (User 1001)
+# Expected: 200 OK | Body: {}
+GET /user/purchased/1001
+
+# Test Case: User does not exist
+# Expected: 404 Not Found | Body: {}
+GET /user/purchased/99999
