@@ -1,0 +1,19 @@
+*.class
+# Exclude the entire compiled directory created by your runme.sh
+compiled/
+lib/*.log
+
+dbConfig.json
+*.env
+
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+.DS_Store
+Thumbs.db
+
+db_data/
