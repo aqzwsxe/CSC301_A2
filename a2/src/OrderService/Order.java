@@ -16,10 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class Order implements java.io.Serializable {
     private static final long serialVersionUID = 1L;
-    /**
-     * A thread-safe counter used to generate unique, sequential order IDs.
-     */
-    public static final AtomicInteger id_counter = new AtomicInteger(0);
+
     /**
      * The unique identifier for the product being ordered.
      */
@@ -50,7 +47,22 @@ public class Order implements java.io.Serializable {
      * @param status the order status
      */
     public Order(int product_id, int user_id, int quantity, String status){
-        this.id = id_counter.getAndIncrement();
+        this.product_id = product_id;
+        this.user_id = user_id;
+        this.quantity = quantity;
+        this.status = status;
+    }
+
+    /**
+     * Constructor used when loading an existing order from the database
+     * @param id
+     * @param product_id
+     * @param user_id
+     * @param quantity
+     * @param status
+     */
+    public Order(int id, int product_id, int user_id, int quantity, String status){
+        this.id = id;
         this.product_id = product_id;
         this.user_id = user_id;
         this.quantity = quantity;
@@ -64,6 +76,10 @@ public class Order implements java.io.Serializable {
      */
     public int getId() {
         return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 
     /**

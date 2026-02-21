@@ -44,6 +44,12 @@ public class User implements Serializable {
         this.purchasedItems = new ConcurrentHashMap<>();
     }
 
+    public User(String username, String email, String password){
+        this.username = username;
+        this.email = email;
+        this.password = password;
+    }
+
     public Map<Integer, Integer> getPurchasedItems(){
         return purchasedItems;
     }
@@ -138,8 +144,8 @@ public class User implements Serializable {
      *
      * @return a JSON string containing the user's ID, username, and email
      */
-    public String toJson(){
+    public String toJson() {
         return String.format("{\"id\": %d, \"username\": \"%s\", \"email\": \"%s\"}",
-                this.id, this.username,this.email);
+                this.id, this.username, this.email);
     }
 }

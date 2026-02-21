@@ -56,11 +56,35 @@ public class ConfigReader {
         int ipKeyIndex = content.indexOf("\"ip\"", serviceIndex);
 
         int colonIndex = content.indexOf(":", ipKeyIndex);
-        int index1 = content.indexOf("}",colonIndex);
-        String ip = content.substring(colonIndex+1,index1).trim();
-        return ip;
+        int firstQuote = content.indexOf("\"", colonIndex);
+        int secondQuote = content.indexOf("\"", firstQuote + 1);
+
+        return content.substring(firstQuote + 1, secondQuote);
     }
 
+
+    public static String getDbUrl(String configFile) throws IOException {
+        return getValue(configFile, "Database", "url");
+    }
+
+    public static String getDbUser(String dbConfig) throws IOException {
+        return getValue(dbConfig, "Database", "user");
+    }
+
+    public static String getDbPassword(String dbConfig) throws IOException {
+        return getValue(dbConfig, "Database", "pass");
+    }
+
+    private static String getValue(String dbConfig, String section, String key) throws IOException {
+        String content = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(dbConfig)));
+        int sectionIndex = content.indexOf("\"" + section + "\"");
+        if (sectionIndex == -1) return null;
+        int keyIndex = content.indexOf("\"" + key + "\"", sectionIndex);
+        if (keyIndex == -1) return null;
+        int valueStart = content.indexOf("\"", keyIndex + ("\"" + key + "\"").length() + 1) + 1;
+        int valueEnd = content.indexOf("\"", valueStart);
+        return content.substring(valueStart, valueEnd);
+    }
 
 //    static void main() throws IOException {
 ////        System.out.println(getPort("config.json", "UserService"));

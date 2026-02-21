@@ -370,6 +370,7 @@ public class UserHandler implements HttpHandler {
 
         String newUsername = getJsonValue(body, "username");
         String newEmail = getJsonValue(body, "email");
+        if (newEmail != null) newEmail = newEmail.trim();
         String newPassword = getJsonValue(body, "password");
         // 1: if the email has an invalid type (the email does not have exact one @)
         // 2: newEmail if empty

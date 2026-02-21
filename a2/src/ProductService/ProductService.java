@@ -1,12 +1,11 @@
 package ProductService;
 
-import Utils.PersistenceManager;
+import Utils.DatabaseManager;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.sql.SQLException;
 
 import Utils.ConfigReader;
 
@@ -18,7 +17,6 @@ public class ProductService {
     /**
      * This is the database to store all the products
      */
-    public static Map<Integer, Product> productDatabase = PersistenceManager.loadServiceData("product.ser",Product.id_counter);
 
     /**
      * The main execution point for the Product microservice
@@ -30,13 +28,14 @@ public class ProductService {
      * @param args The command line arguments. Expects a path to a JSON configuration file
      * @throws IOException If the server cannot be started or bound to the network port
      */
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, SQLException {
         if(args.length < 1){
             System.err.println("Miss the config.json");
             System.exit(1);
         }
 
         String configPath = args[0];
+        DatabaseManager.initializeTables();
         try{
             int port = ConfigReader.getPort(configPath, "ProductService");
             // new InetSocketAddress(port): combine the IP address and the port number

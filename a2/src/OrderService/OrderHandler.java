@@ -1,6 +1,7 @@
 package OrderService;
 
 import Utils.ConfigReader;
+import Utils.DatabaseManager;
 import Utils.PersistenceManager;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -77,27 +78,28 @@ public class OrderHandler implements HttpHandler {
             if(isFirstRequest){
                 isFirstRequest = false;
                 if(path.equals("/restart")){
-                    OrderService.orderDatabase = PersistenceManager.loadServiceData("order.ser",Order.id_counter);
+                    System.out.println("OrderService: First request is RESTART. Keeping DB data");
                     sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
                     return;
                 } else {
-                    new File("order.ser").delete();
-                    signalInternalServices("clear");
+                    System.out.println("OrderService: First request is NOT restart. Wiping DB.");
+                    DatabaseManager.clearAllData();
                 }
             }
 
             if(path.equals("/shutdown")){
-                PersistenceManager.saveServiceData("order.ser",OrderService.orderDatabase, Order.id_counter);
+                System.out.println("OrderService: Shutting down all services");
                 signalInternalServices("shutdown");
                 sendResponse(exchange, 200, "{\"status\": \"Shutting down\"}".getBytes());
 
                 new Thread(()->{
-                    try{
+                    try {
+                        // Give the response time to send, then exit
                         Thread.sleep(500);
+                        System.exit(0);
                     }catch (Exception ignored){
 
                     }
-                    System.exit(0);
                 }).start();
                 return;
             }
@@ -147,7 +149,7 @@ public class OrderHandler implements HttpHandler {
         }
         try {
             int orderId = Integer.parseInt(parts[2]);
-            Order order = OrderService.orderDatabase.get(orderId);
+            Order order = DatabaseManager.getOrderById(orderId);
             if(order != null){
                 sendResponse(exchange, 200, order.toJson().getBytes());
             }else{
@@ -181,37 +183,38 @@ public class OrderHandler implements HttpHandler {
 
         try {
             int orderId = Integer.parseInt(parts[2]);
-            Order order = OrderService.orderDatabase.get(orderId);
+            Order order = DatabaseManager.getOrderById(orderId);
             if(order==null){
                 sendError(exchange, 404, "Order not found");
+                return;
+            }
+
+            if ("Cancelled".equalsIgnoreCase(order.getStatus())){
+                sendError(exchange, 400, "Order already cancelled");
                 return;
             }
             HttpResponse<String> prodRes = client.send(
                     HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/product/" + order.getProduct_id())).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
             );
+
             if(prodRes.statusCode() == 200){
                 int currentStock = Integer.parseInt(getJsonValue(prodRes.body(), "quantity"));
                 int restoredStock = currentStock + order.getQuantity();
 
-                String updateBody = String.format(
-                        "{\"command\": \"update\", \"id\": %d, \"quantity\": %d}",
-                        order.getProduct_id(), restoredStock
-                );
-
-                client.send(
-                        HttpRequest.newBuilder()
-                                .uri(URI.create(iscsUrl + "/product"))
-                                .header("Content-Type", "application/json")
-                                .POST(HttpRequest.BodyPublishers.ofString(updateBody))
-                                .build(),
-                        HttpResponse.BodyHandlers.ofByteArray()
-                );
+                boolean success = DatabaseManager.cancelOrder(orderId, order.getProduct_id(), restoredStock);
+                if(success){
+                    sendResponse(exchange, 200, "{\"status\": \"Order cancelled and stock restored\"}".getBytes());
+                    return;
+                }else {
+                    sendError(exchange, 500, "Database Transaction Failed");
+                }
+            } else {
+                sendError(exchange, 404, "Product associated with order no longer exists");
             }
-//            OrderService.orderDatabase.remove(orderId);
-            order.setStatus("Cancelled");
-            sendResponse(exchange, 200, "{\"status\": \"Order cancelled and stock restored\"}".getBytes());
-        }catch (Exception e){}
+        }catch (Exception e){
+            sendError(exchange, 400, "{}");
+        }
     }
 
     /**
@@ -273,35 +276,27 @@ public class OrderHandler implements HttpHandler {
             }
 
             int newStock = availableQuantity-quantity;
-            String updateBody = String.format(
-                    "{\"command\": " +
-                            "\"update\", " +
-                            "\"id\": %s, " +
-                            "\"quantity\": %d}",
-                    productId, newStock
+            // Insead of sending a POST request to /product via ISCS, update the stock directly in the database inside the same
+//          // transaction as the order creation. This is faster and safer
+            boolean transactionSuccess = DatabaseManager.placeOrder(
+                    Integer.parseInt(productId),
+                    Integer.parseInt(userId),
+                    quantity,
+                    newStock
             );
-
-
-            String successJson = String.format(
-                    "{\n" +
-                            "        \"product_id\": %s,\n" +
-                            "        \"user_id\": %s,\n" +
-                            "        \"quantity\": %d,\n" +
-                            "        \"status\": \"Success\"\n" +
-                            "    }",
-                    productId, userId, quantity);
-            client.send(
-                    HttpRequest.newBuilder()
-                            .uri(URI.create(iscsUrl + "/product"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString(updateBody))
-                            .build(),
-                    HttpResponse.BodyHandlers.ofByteArray()
-            );
-            Order newOrder = new Order(Integer.parseInt(productId), Integer.parseInt(userId), quantity, "Success");
-            OrderService.orderDatabase.put(newOrder.getId(), newOrder);
-            sendResponse(exchange, 200, successJson.getBytes());
-
+            if(transactionSuccess){
+                String successJson = String.format(
+                        "{\n" +
+                                "        \"product_id\": %s,\n" +
+                                "        \"user_id\": %s,\n" +
+                                "        \"quantity\": %d,\n" +
+                                "        \"status\": \"Success\"\n" +
+                                "    }",
+                        productId, userId, quantity);
+                sendResponse(exchange,200,successJson.getBytes());
+            }else {
+                sendError(exchange, 500, "Database Transaction Failed");
+            }
         }catch (Exception e){
             sendError(exchange, 400, "Invalid Request");
         }
@@ -417,13 +412,7 @@ public class OrderHandler implements HttpHandler {
                 return;
             }
             // Aggregate purchases
-            Map<Integer, Integer> purchases = new HashMap<>();
-            for(Order order : OrderService.orderDatabase.values()){
-                if(order.getUser_id() ==userId && "Success".equals(order.getStatus())){
-                    purchases.merge(order.getProduct_id(), order.getQuantity(), Integer::sum);
-                }
-
-            }
+            Map<Integer, Integer> purchases = DatabaseManager.getUserPurchases(userId);
             String jsonResponse = mapToJson(purchases);
             sendResponse(exchange, 200, jsonResponse.getBytes(StandardCharsets.UTF_8));
         }catch (NumberFormatException e){
