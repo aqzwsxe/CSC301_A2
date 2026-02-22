@@ -17,14 +17,23 @@ public class DBConfig {
         if(file.exists()){
             try {
                 String content = new String(Files.readAllBytes(Paths.get("dbConfig.json")));
-                String pasrseUrl = getDBJsonValue(content, "db_url");
-                if(pasrseUrl != null) config1.url = pasrseUrl;
+                String pasrseUrl = getDBJsonValue(content, "url");
+                if(pasrseUrl != null) {
+                    config1.url = pasrseUrl;
+                    System.out.println("The url: "+ pasrseUrl);
+                }
 
-                String parsedUser = getDBJsonValue(content, "db_user");
-                if(parsedUser != null) config1.user = parsedUser;
+                String parsedUser = getDBJsonValue(content, "user");
+                if(parsedUser != null) {
+                    config1.user = parsedUser;
+                    System.out.println("The user: "+ parsedUser);
+                }
 
-                String parsedPass = getDBJsonValue(content, "db_password");
-                if(parsedPass != null) config1.pass = parsedPass;
+                String parsedPass = getDBJsonValue(content, "pass");
+                if(parsedPass != null) {
+                    config1.pass = parsedPass;
+                    System.out.println("The password: "+ parsedPass);
+                }
 
                 System.out.println("[DBConfig] Loaded custom configuration from dbConfig.json");
 
@@ -58,5 +67,9 @@ public class DBConfig {
         return value;
     }
 
+
+//    static void main() {
+//        load1();
+//    }
 
 }
