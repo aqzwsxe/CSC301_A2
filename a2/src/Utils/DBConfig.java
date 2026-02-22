@@ -32,7 +32,7 @@ public class DBConfig {
                 String parsedPass = getDBJsonValue(content, "pass");
                 if(parsedPass != null) {
                     config1.pass = parsedPass;
-                    System.out.println("The password: "+ parsedPass);
+//                    System.out.println("The password: "+ parsedPass);
                 }
 
                 System.out.println("[DBConfig] Loaded custom configuration from dbConfig.json");
