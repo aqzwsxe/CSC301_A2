@@ -5,13 +5,22 @@
 CONFIG="config.json"
 OUT_DIR="compiled"
 SRC_DIR="src"
+LIB_DIR="lib"
+JDBC_JAR="$LIB_DIR/postgresql-42.7.2.jar"
 
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+    CP_SEP=";"
+else
+    CP_SEP=":"
+fi
 # Function to compile a service
 compile_service(){
 local service=$1
     echo "Compiling $service..."
     mkdir -p "$OUT_DIR"
     javac -cp "$OUT_DIR" -d "$OUT_DIR" -sourcepath "$SRC_DIR" "$SRC_DIR/$service"/*.java
+    # For the database
+    javac -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" -d "$OUT_DIR" -sourcepath "$SRC_DIR" "$SRC_DIR/$service"/*.java
 }
 
 case "$1" in
@@ -37,26 +46,26 @@ case "$1" in
 
     -u)
             echo "Starting User Service"
-            java -cp "$OUT_DIR" UserService.UserService "$CONFIG"
+            java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" UserService.UserService "$CONFIG"
             echo  "Press enter to close"
             read
             ;;
 
     -p)
             echo "Starting Product Service"
-            java -cp "$OUT_DIR" ProductService.ProductService "$CONFIG"
+            java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" ProductService.ProductService "$CONFIG"
             echo  "Press enter to close"
             read
             ;;
     -i)
             echo "Starting Inter-Service Communication Service (ISCS)"
-            java -cp "$OUT_DIR" ISCS.ISCS "$CONFIG"
+            java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" ISCS.ISCS "$CONFIG"
             echo  "Press enter to close"
             read
             ;;
     -o)
             echo "Starting Order Service"
-            java -cp "$OUT_DIR" OrderService.OrderService "$CONFIG"
+            java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" OrderService.OrderService "$CONFIG"
             echo  "Press enter to close"
             read
             ;;
@@ -65,9 +74,10 @@ case "$1" in
             # Check if the workload file was provided
             if [ -z "$2" ]; then
                 echo "Error: Please provide a workload file"
+            else
+                echo "Starting Workload Parser with file: $2"
+                java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" Utils.WorkloadParser "$2"
             fi
-            echo "Starting Workload Parser with file: $2"
-            java -cp "$OUT_DIR" Utils.WorkloadParser "$2"
             ;;
     *)
             echo "used a wrong command"

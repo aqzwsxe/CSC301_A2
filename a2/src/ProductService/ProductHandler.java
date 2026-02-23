@@ -1,6 +1,6 @@
 package ProductService;
 
-import Utils.PersistenceManager;
+import Utils.DatabaseManager;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
@@ -8,8 +8,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
+import java.sql.SQLException;
+
 
 /**
  * Handles the given product request and generates an appropriate response.
@@ -62,6 +62,8 @@ public class ProductHandler implements HttpHandler {
             return;
         }
         String idStr = parts[2];
+
+
         int id;
         if (idStr == null) {
             sendResponse(exchange, 400, errorResponse);
@@ -69,13 +71,13 @@ public class ProductHandler implements HttpHandler {
         } else {
             try {
                 id = Integer.parseInt(idStr);
-            } catch (Exception e) {
+            } catch (NumberFormatException e) {
                 sendResponse(exchange,400, errorResponse);
                 return;
             }
         }
-
-        Product product = ProductService.productDatabase.get(id);
+        // get the product from the real database
+        Product product = DatabaseManager.getProductById(id);
 
         if(product != null){
             sendResponse(exchange, 200, product.toJson());
@@ -94,7 +96,7 @@ public class ProductHandler implements HttpHandler {
      * @param exchange the HTTP exchange used to read and write the response; must be non-null
      * @throws IOException if an I/O error occurs while sending the response
      */
-    private void handlePost(HttpExchange exchange) throws IOException {
+    private void handlePost(HttpExchange exchange) throws IOException, SQLException {
         InputStream is = exchange.getRequestBody();
         String body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
 
@@ -111,16 +113,13 @@ public class ProductHandler implements HttpHandler {
 
         switch (command){
             case "clear":
-                ProductService.productDatabase.clear();
-                Product.id_counter.set(0);
+                DatabaseManager.clearAllData();
                 sendResponse(exchange, 200, "{}\n");
                 return;
             case "restart":
-                ProductService.productDatabase = PersistenceManager.loadServiceData("product.ser",Product.id_counter);
                 sendResponse(exchange,200,"{}\n");
                 return;
             case "shutdown":
-                PersistenceManager.saveServiceData("product.ser",ProductService.productDatabase, Product.id_counter);
                 sendResponse(exchange, 200, "{}\n");
                 new Thread(()->{
                     try {
@@ -291,7 +290,7 @@ public class ProductHandler implements HttpHandler {
      */
     public void handleCreate(HttpExchange exchange, int id, String body) throws IOException {
         // ID issues:
-        if(ProductService.productDatabase.containsKey(id)){
+        if(DatabaseManager.getProductById(id)!=null){
             sendResponse(exchange,409,errorResponse);
             return;
         }
@@ -301,19 +300,24 @@ public class ProductHandler implements HttpHandler {
             return;
         }
 
-        if (inputContentCheck(body, true)) {
-            String name = getJsonValue(body, "name");
-            String description = getJsonValue(body, "description");
-            float price = Float.parseFloat(getJsonValue(body, "price"));
-            int quantity = Integer.parseInt(getJsonValue(body, "quantity"));
+        try {
+            if (inputContentCheck(body, true)) {
+                String name = getJsonValue(body, "name");
+                String description = getJsonValue(body, "description");
+                float price = Float.parseFloat(getJsonValue(body, "price"));
+                int quantity = Integer.parseInt(getJsonValue(body, "quantity"));
 
-            Product newProduct = new Product(id, name, description, price, quantity);
-            ProductService.productDatabase.put(id, newProduct);
+                DatabaseManager.saveProduct(id,name,description,price,quantity);
+                Product newProduct = new Product(id, name, description, price, quantity);
 
-            sendResponse(exchange, 200, newProduct.toJson());
-        } else {
-            sendResponse(exchange,400, errorResponse);
+                sendResponse(exchange, 200, newProduct.toJson());
+            } else {
+                sendResponse(exchange,400, errorResponse);
+            }
+        }catch (Exception e){
+            sendResponse(exchange,500,errorResponse);
         }
+
     }
 
     /**
@@ -331,8 +335,8 @@ public class ProductHandler implements HttpHandler {
      * @param body a JSON string containing the product id, name, description, price, and quantity
      * @throws IOException if an I/O error occurs while sending the response
      */
-    public  void handleUpdate(HttpExchange exchange, int id, String body) throws IOException {
-        Product product = ProductService.productDatabase.get(id);
+    public  void handleUpdate(HttpExchange exchange, int id, String body) throws SQLException, IOException {
+        Product product = DatabaseManager.getProductById(id);
         if(product == null){
             sendResponse(exchange, 404, errorResponse);
             return;
@@ -390,6 +394,7 @@ public class ProductHandler implements HttpHandler {
                 return;
             }
         }
+        DatabaseManager.saveProduct(product.getPid(),product.getName(),product.getDescription(),product.getPrice(),product.getQuantity());
         sendResponse(exchange, 200, product.toJson());
         return;
     }
@@ -411,41 +416,50 @@ public class ProductHandler implements HttpHandler {
      */
     public void handleDelete(HttpExchange exchange, int id, String body) throws IOException {
 
-        Product product = ProductService.productDatabase.get(id);
-        if(product == null){
-            sendResponse(exchange, 404, errorResponse);
-            return;
-        }
-
-        String nameValue = getJsonValue(body, "name");
-
-        // Check if name is missing (null) OR the explicit "invalid-info" signal
-        if (nameValue == null || nameValue.equals("invalid-info")) {
-            sendResponse(exchange, 400, errorResponse);
-            return;
-        }
-
-        // check if this is an invalid json file
-        if(getJsonValue(body, "name").equals("invalid-info")) {
-            sendResponse(exchange, 400, errorResponse);
-            return;
-        }
-
-        if (inputContentCheck(body, false)) {
-            String name = getJsonValue(body, "name");
-//            String description = getJsonValue(body, "description");
-            float price = Float.parseFloat(getJsonValue(body, "price"));
-            int quantity = Integer.parseInt(getJsonValue(body, "quantity"));
-
-            if (product.getName().equals(name)  && product.getPrice() == price &&
-                    product.getQuantity() == quantity) { // && product.getDescription().equals(description)
-                ProductService.productDatabase.remove(id);
-                sendResponse(exchange, 200, "{}\n");
-            } else {
-                sendResponse(exchange,404, errorResponse);
+        try {
+            Product product = DatabaseManager.getProductById(id);
+            if(product == null){
+                sendResponse(exchange, 404, errorResponse);
+                return;
             }
-        } else {
-            sendResponse(exchange,400, errorResponse);
+
+            String nameValue = getJsonValue(body, "name");
+
+            // Check if name is missing (null) OR the explicit "invalid-info" signal
+            if (nameValue == null || nameValue.equals("invalid-info")) {
+                sendResponse(exchange, 400, errorResponse);
+                return;
+            }
+
+            // check if this is an invalid json file
+            if(getJsonValue(body, "name").equals("invalid-info")) {
+                sendResponse(exchange, 400, errorResponse);
+                return;
+            }
+
+            if (inputContentCheck(body, false)) {
+                String name = getJsonValue(body, "name");
+//            String description = getJsonValue(body, "description");
+                float price = Float.parseFloat(getJsonValue(body, "price"));
+                int quantity = Integer.parseInt(getJsonValue(body, "quantity"));
+
+                if (product.getName().equals(name)  && product.getPrice() == price &&
+                        product.getQuantity() == quantity) { // && product.getDescription().equals(description)
+                        DatabaseManager.deleteProduct(id, name,price,quantity);
+                    sendResponse(exchange, 200, "{}\n");
+                } else {
+                    sendResponse(exchange,404, errorResponse);
+                }
+            } else {
+                sendResponse(exchange,400, errorResponse);
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
+
+
+
+
     }
 }

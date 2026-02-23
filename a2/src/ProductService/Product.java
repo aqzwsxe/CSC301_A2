@@ -17,7 +17,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class Product implements Serializable {
     private static final long serialVersionUID = 1L;
-    public static AtomicInteger id_counter = new AtomicInteger(0);
 
     int pid;
     String name;
@@ -36,6 +35,13 @@ public class Product implements Serializable {
      */
     public Product(int pid, String name, String description, float price, int quantity_in_stock) {
         this.pid = pid;
+        this.name = name;
+        this.description = description;
+        this.price = price;
+        this.quantity_in_stock = quantity_in_stock;
+    }
+
+    public  Product(String name, String description, float price, int quantity_in_stock){
         this.name = name;
         this.description = description;
         this.price = price;

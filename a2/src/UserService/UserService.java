@@ -1,10 +1,12 @@
 package UserService;
 
+import Utils.DatabaseManager;
 import Utils.PersistenceManager;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.sql.SQLException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -34,7 +36,7 @@ public class UserService {
      * @param args The command line arguments; expects the config file path at index 0.
      * @throws IOException If the server cannot be started or bound to the network port.
      */
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, SQLException {
         // Get port from config
 //        int port = Utils.ConfigReader.getPort(args[0], "UserService");
         if(args.length < 1){
@@ -43,6 +45,8 @@ public class UserService {
         }
 
         String configPath = args[0];
+
+        DatabaseManager.initializeTables();
         try{
             int port = ConfigReader.getPort(configPath, "UserService");
             // new InetSocketAddress(port): combine the IP address and the port number
@@ -60,6 +64,10 @@ public class UserService {
             server.setExecutor(Executors.newFixedThreadPool(10));
             server.start();
             System.out.println("UserService is listening on port " + port);
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                System.out.println("Shutting down UserService...");
+                server.stop(0);
+            }));
         } catch (IOException e){
             System.err.println("Failed to start server: " + e.getMessage());
 

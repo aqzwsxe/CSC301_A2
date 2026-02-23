@@ -1,12 +1,14 @@
 package OrderService;
 
 import Utils.ConfigReader;
+import Utils.DatabaseManager;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpRequest;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,7 +24,7 @@ public class OrderService {
     /**
      * A database to store all the orders
      */
-    public static Map<Integer, Order> orderDatabase = new ConcurrentHashMap<>();
+//    public static Map<Integer, Order> orderDatabase = new ConcurrentHashMap<>();
 
     /**
      * The Main entry point for Order Service.
@@ -31,12 +33,28 @@ public class OrderService {
      * @param args Command line arguments. Expects the path to the configuration JSON as the first element.
      * @throws IOException If the server cannot be initialized or the configuration file is inaccessible
      */
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, SQLException {
         if(args.length < 1){
             System.out.println("The config file has some issues");
             return;
         }
+
         String configFile = args[0];
+        DatabaseManager.initializeTables();
+        String dbConfig = (args.length > 1) ? args[1] : "dbConfig.json";
+        File dbFile = new File(dbConfig);
+        if(!dbFile.exists()){
+            System.err.println("Database config file [" + dbConfig + "] not found");
+            return;
+        }
+        try {
+            DatabaseManager.setup(ConfigReader.getDbUrl(dbConfig),
+                        ConfigReader.getDbUser(dbConfig),
+                        ConfigReader.getDbPassword(dbConfig)
+                    );
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         int port = ConfigReader.getPort(configFile, "OrderService");
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
