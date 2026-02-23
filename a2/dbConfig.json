@@ -1,7 +1,7 @@
 {
   "Database": {
-    "url": "jdbc:postgresql://localhost:5432/your_db_name",
-    "user": "your_user",
-    "pass": "your_password"
+    "url": "jdbc:postgresql://localhost:5432/postgres",
+    "user": "postgres",
+    "pass": "password123" 
   }
 }

@@ -353,12 +353,12 @@ public class WorkloadParser {
         try {
             //System.out.println("run the sendPostRequest");
             String fullUrl = (orderUrl + endpoint).replaceAll("\\s", "");
-
+	    System.out.println("Send the request");
             HttpRequest request  = HttpRequest.newBuilder()
                     .uri(URI.create(fullUrl))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
-            //System.out.println("After the HTTPRequest");
+            System.out.println("After the HTTPRequest");
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             System.out.println("POST " + endpoint + " | Status: " + response.statusCode());
             System.out.println("Data: " + response.body());
