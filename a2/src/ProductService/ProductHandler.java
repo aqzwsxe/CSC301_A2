@@ -99,8 +99,13 @@ public class ProductHandler implements HttpHandler {
     private void handlePost(HttpExchange exchange) throws IOException, SQLException {
         InputStream is = exchange.getRequestBody();
         String body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-
+        String path = exchange.getRequestURI().getPath();
         String command = getJsonValue(body, "command");
+        if (command == null) {
+            if (path.contains("/restart")) command = "restart";
+            else if (path.contains("/shutdown")) command = "shutdown";
+        }
+
         if (command == null) {
             sendResponse(exchange, 400, errorResponse);
             return;

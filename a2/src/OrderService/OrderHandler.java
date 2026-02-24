@@ -74,32 +74,28 @@ public class OrderHandler implements HttpHandler {
         System.out.println("method "+ method);
         System.out.println("The bodyString: "+ bodyString);
         try {
-            // Startup logic
-            if(isFirstRequest){
+
+            if(path.equals("/restart")|| isFirstRequest){
+                boolean wasFirst = isFirstRequest;
                 isFirstRequest = false;
                 if(path.equals("/restart")){
-                    System.out.println("OrderService: First request is RESTART. Keeping DB data");
+                    System.out.println("OrderService: Manual Restart. Wiping DB and signaling others.");
+                    DatabaseManager.clearAllData();
+                    signalInternalServices("restart");
                     sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
                     return;
-                } else {
+                } else if (wasFirst) {
                     System.out.println("OrderService: First request is NOT restart. Wiping DB.");
                     DatabaseManager.clearAllData();
                 }
             }
 
-            if(path.equals("/shutdown")){
+            if (path.equals("/shutdown")){
                 System.out.println("OrderService: Shutting down all services");
                 signalInternalServices("shutdown");
                 sendResponse(exchange, 200, "{\"status\": \"Shutting down\"}".getBytes());
-
-                new Thread(()->{
-                    try {
-                        // Give the response time to send, then exit
-                        Thread.sleep(500);
-                        System.exit(0);
-                    }catch (Exception ignored){
-
-                    }
+                new Thread(() -> {
+                    try { Thread.sleep(500); System.exit(0); } catch (Exception ignored) {}
                 }).start();
                 return;
             }

@@ -162,13 +162,15 @@ public class UserHandler implements HttpHandler {
         InputStream is = exchange.getRequestBody();
         String body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
 //        System.out.println("inside the handlePost: "+body);
+        String path = exchange.getRequestURI().getPath();
 
         String command = getJsonValue(body, "command");
         String idStr = getJsonValue(body, "id");
         // this part handles create and delete and update
         if(command==null ){
-            sendResponse(exchange, 400, "{}");
-            return;
+//
+            if (path.contains("/restart")) command = "restart";
+            else if (path.contains("/shutdown")) command = "shutdown";
         }
 
         switch (command){
