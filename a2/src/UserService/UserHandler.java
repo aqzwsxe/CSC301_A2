@@ -180,7 +180,6 @@ public class UserHandler implements HttpHandler {
                 sendResponse(exchange, 200, "{}");
                 return;
             case "restart":
-                DatabaseManager.initializeTables();
                 sendResponse(exchange, 200, "{}");
                 return;
             case  "shutdown":
