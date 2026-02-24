@@ -40,21 +40,29 @@ public class OrderService {
         }
 
         String configFile = args[0];
-        DatabaseManager.initializeTables();
         String dbConfig = (args.length > 1) ? args[1] : "dbConfig.json";
         File dbFile = new File(dbConfig);
-        if(!dbFile.exists()){
-            System.err.println("Database config file [" + dbConfig + "] not found");
-            return;
-        }
         try {
+            if(dbFile.exists()){
             DatabaseManager.setup(ConfigReader.getDbUrl(dbConfig),
                         ConfigReader.getDbUser(dbConfig),
                         ConfigReader.getDbPassword(dbConfig)
-                    );
+                    );}
+            else {
+                DatabaseManager.setup("jdbc:postgresql://localhost:5432/postgres", "postgres", "password123");
+                System.out.println("Config file not found. Using default Docker credentials.");
+            }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+        try {
+            DatabaseManager.initializeTables();
+            System.out.println("System ready and database initialized");
+        }catch (SQLException e){
+            System.err.println("Failed to initialize tables: " + e.getMessage());
+            return;
+        }
+
         int port = ConfigReader.getPort(configFile, "OrderService");
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);

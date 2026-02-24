@@ -1,5 +1,6 @@
 package UserService;
 
+import Utils.DatabaseManager;
 import Utils.PersistenceManager;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -11,6 +12,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashMap;
 
@@ -107,7 +109,7 @@ public class UserHandler implements HttpHandler {
 
         try {
             int id = Integer.parseInt(parts[2]);
-            User user = UserService.userDatabase.get(id);
+            User user = DatabaseManager.getUserById(id);
             // 404 or 400
             if(user==null){
                 sendResponse(exchange, 404, "{}");
@@ -140,6 +142,8 @@ public class UserHandler implements HttpHandler {
             return;
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
 
 
@@ -154,7 +158,7 @@ public class UserHandler implements HttpHandler {
      * @param exchange the HTTP exchange used to read and write the response; must be non-null
      * @throws IOException if an I/O error occurs while sending the response
      */
-    private void handlePost(HttpExchange exchange) throws IOException, NoSuchAlgorithmException {
+    private void handlePost(HttpExchange exchange) throws IOException, NoSuchAlgorithmException, SQLException {
         InputStream is = exchange.getRequestBody();
         String body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
 //        System.out.println("inside the handlePost: "+body);
@@ -169,16 +173,16 @@ public class UserHandler implements HttpHandler {
 
         switch (command){
             case "clear":
-                UserService.userDatabase.clear();
+                DatabaseManager.clearAllData();
                 User.id_counter.set(0);
                 sendResponse(exchange, 200, "{}");
                 return;
             case "restart":
-                UserService.userDatabase = Utils.PersistenceManager.loadServiceData("user.ser", User.id_counter);
+                DatabaseManager.initializeTables();
                 sendResponse(exchange, 200, "{}");
                 return;
             case  "shutdown":
-                PersistenceManager.saveServiceData("user.ser", UserService.userDatabase, User.id_counter);
+
                 sendResponse(exchange, 200, "{}");
                 new Thread(()->{try {Thread.sleep(200); System.exit(0);
                 } catch (Exception e) {
@@ -223,7 +227,7 @@ public class UserHandler implements HttpHandler {
             int productId = Integer.parseInt(getJsonValue(body, "product_id"));
             int quantity = Integer.parseInt(getJsonValue(body, "quantity"));
 
-            User user = UserService.userDatabase.get(userId);
+            User user = DatabaseManager.getUserById(userId);
             if(user != null){
                 user.getPurchasedItems().merge(productId, quantity, Integer::sum);
                 sendResponse(exchange, 200, "{}");
@@ -300,9 +304,9 @@ public class UserHandler implements HttpHandler {
      * @param body a JSON string containing the user id, username, email, password
      * @throws IOException if an I/O error occurs while sending the response
      */
-    public  void  handleCreate(HttpExchange exchange, int id, String body) throws IOException, NoSuchAlgorithmException {
+    public  void  handleCreate(HttpExchange exchange, int id, String body) throws IOException, NoSuchAlgorithmException, SQLException {
         System.out.println("Start the handle create method");
-        if(UserService.userDatabase.containsKey(id)){
+        if(DatabaseManager.getUserById(id)!=null){
             System.out.println("User already exist");
             sendResponse(exchange,409,"{}");
             return;
@@ -331,7 +335,7 @@ public class UserHandler implements HttpHandler {
 
 
         User newUser = new User(id, username, email, password);
-        UserService.userDatabase.put(id,newUser);
+        DatabaseManager.saveUserFull(id, username, email, password);
         String hashed_password = hash_helper(password);
         String res1 = String.format("{\n" +
                 "        \"id\": %d,\n" +
@@ -361,8 +365,8 @@ public class UserHandler implements HttpHandler {
      * @param body a JSON string containing the user id, username, email, password
      * @throws IOException if an I/O error occurs while sending the response
      */
-    public  void handleUpdate(HttpExchange exchange, int id, String body) throws IOException, NoSuchAlgorithmException {
-        User user = UserService.userDatabase.get(id);
+    public  void handleUpdate(HttpExchange exchange, int id, String body) throws IOException, NoSuchAlgorithmException, SQLException {
+        User user = DatabaseManager.getUserById(id);
         if(user==null){
             sendResponse(exchange, 404, "{}");
             return;
@@ -389,6 +393,7 @@ public class UserHandler implements HttpHandler {
         if(newUsername!=null){
             user.setUsername(newUsername);
         }
+
         if(newEmail != null){
             user.setEmail(newEmail);
         }
@@ -396,6 +401,7 @@ public class UserHandler implements HttpHandler {
             user.setPassword(newPassword);
         }
         String hashed_password = hash_helper(user.getPassword());
+        DatabaseManager.updateUser(id, user.getUsername(), user.getEmail(), user.getPassword());
         String res1 = String.format("{\n" +
                 "        \"id\": %d,\n" +
                 "        \"username\": \"%s\",\n" +
@@ -421,8 +427,8 @@ public class UserHandler implements HttpHandler {
      * @param body a JSON string containing the user id, username, email, password
      * @throws IOException if an I/O error occurs while sending the response
      */
-    public void handleDelete(HttpExchange exchange, int id, String body) throws IOException, NoSuchAlgorithmException {
-        User user = UserService.userDatabase.get(id);
+    public void handleDelete(HttpExchange exchange, int id, String body) throws IOException, NoSuchAlgorithmException, SQLException {
+        User user = DatabaseManager.getUserById(id);
         if(user==null){
             sendResponse(exchange,404, "{}");
             return;
@@ -445,7 +451,7 @@ public class UserHandler implements HttpHandler {
                 hashedStored.equals(hashedIncoming);
 
         if(match){
-            UserService.userDatabase.remove(id);
+            DatabaseManager.deleteUser(id);
             sendResponse(exchange, 200, "{}");
             return;
         } else{

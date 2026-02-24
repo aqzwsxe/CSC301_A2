@@ -22,10 +22,6 @@ public class UserService {
 //    Use ConcurrentHashMap instead rather than HashMap, because server is multi-threaded
 //    create an interface or super-class, the map is the placeholder; when receive the new requirement; create
     // the actual subclass for the database
-    /**
-     * This is the database to store all the Users
-     */
-    public static Map<Integer, User> userDatabase = PersistenceManager.loadServiceData("user.ser", User.id_counter);
 
     /**
      * The main execution point that starts the User microservice
@@ -45,9 +41,20 @@ public class UserService {
         }
 
         String configPath = args[0];
-
-        DatabaseManager.initializeTables();
+        // Initialize DB connection
+        String dbConfig = (args.length > 1) ? args[1] : "dbConfig.json";
+        java.io.File dbFile = new java.io.File(dbConfig);
+        if(dbFile.exists()){
+            DatabaseManager.setup(ConfigReader.getDbUrl(dbConfig),
+                        ConfigReader.getDbUser(dbConfig),
+                        ConfigReader.getDbPassword(dbConfig)
+                    );
+        }else {
+            DatabaseManager.setup("jdbc:postgresql://localhost:5432/postgres", "postgres", "password123");
+        }
         try{
+            DatabaseManager.initializeTables();
+            System.out.println("[Database] Connection and tables verified.");
             int port = ConfigReader.getPort(configPath, "UserService");
             // new InetSocketAddress(port): combine the IP address and the port number
             // Don't really need to specify the ip address

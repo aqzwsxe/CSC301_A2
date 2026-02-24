@@ -1,15 +1,16 @@
 package Utils;
 import OrderService.Order;
 import ProductService.Product;
+import UserService.User;
 
 import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
 
 public class DatabaseManager {
-    private static String dbUser;
-    private static String dbPass;
-    private static String dbUrl;
+    private static String dbUser="postgres";
+    private static String dbPass="password123";
+    private static String dbUrl="jdbc:postgresql://localhost:5432/postgres";;
     private static DBConfig config = DBConfig.load1();
 
 
@@ -333,6 +334,28 @@ public class DatabaseManager {
         return null;
     }
 
+    public static User getUserById(int id) throws SQLException {
+        String sql = "SELECT * FROM users WHERE id = ?";
+        try(Connection conn = getConnection();
+            PreparedStatement preparedStatement = conn.prepareStatement(sql)
+
+        ) {
+            preparedStatement.setInt(1, id);
+            try (ResultSet rs = preparedStatement.executeQuery()){
+                if(rs.next()){
+                    return new User(rs.getInt("id"),
+                            rs.getString("username"),
+                            rs.getString("email"),
+                            rs.getString("password")
+                    );
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching user: " + e.getMessage());
+        }
+        return null;
+    }
+
 
     public static void initializeTables() throws SQLException {
         String userTable = "CREATE TABLE IF NOT EXISTS users (" +
@@ -369,6 +392,42 @@ public class DatabaseManager {
 
         } catch (SQLException e){
             System.err.println("[DatabaseManager] Error initializing tables: " + e.getMessage());
+        }
+    }
+
+
+    public static void saveUserFull(int id, String username, String email, String password){
+        String sql = "INSERT INTO users (id, username, email, password) VALUES (?, ?, ?, ?)";
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, id);
+            pstmt.setString(2, username);
+            pstmt.setString(3, email);
+            pstmt.setString(4, password);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void updateUser(int id, String username, String email, String password) throws SQLException {
+        String sql = "UPDATE users SET username = ?, email = ?, password = ? WHERE id = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, username);
+            pstmt.setString(2, email);
+            pstmt.setString(3, password);
+            pstmt.setInt(4, id);
+            pstmt.executeUpdate();
+        }
+    }
+
+    public static void deleteUser(int id) throws SQLException {
+        String sql = "DELETE FROM users WHERE id = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, id);
+            pstmt.executeUpdate();
         }
     }
 

@@ -18,7 +18,6 @@ compile_service(){
 local service=$1
     echo "Compiling $service..."
     mkdir -p "$OUT_DIR"
-    javac -cp "$OUT_DIR" -d "$OUT_DIR" -sourcepath "$SRC_DIR" "$SRC_DIR/$service"/*.java
     # For the database
     javac -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" -d "$OUT_DIR" -sourcepath "$SRC_DIR" "$SRC_DIR/$service"/*.java
 }
@@ -37,8 +36,22 @@ case "$1" in
             compile_service "OrderService"
             compile_service "ProductService"
             compile_service "ISCS"
-            compile_service "Utils"
 
+
+            echo "Rebuilding Database Container"
+            # rmove the old one if it exists
+            docker rm -f my-postgres 2>/dev/null
+
+            # Create the container
+            docker run -d \
+              --name my-postgres \
+              -e POSTGRES_USER=postgres \
+              -e POSTGRES_PASSWORD=password123 \
+              -e POSTGRES_DB=postgres \
+              -p 5432:5432 \
+              postgres:15
+            echo "Waiting for database to start..."
+            sleep 5
             echo "Done."
             echo  "Press enter to close"
             read

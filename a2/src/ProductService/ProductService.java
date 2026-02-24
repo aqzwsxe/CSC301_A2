@@ -3,6 +3,7 @@ package ProductService;
 import Utils.DatabaseManager;
 import com.sun.net.httpserver.HttpServer;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.sql.SQLException;
@@ -35,7 +36,30 @@ public class ProductService {
         }
 
         String configPath = args[0];
-        DatabaseManager.initializeTables();
+        String dbConfig = (args.length > 1) ? args[1] : "dbConfig.json";
+        File dbFile = new File(dbConfig);
+        try {
+            if(dbFile.exists()){
+                DatabaseManager.setup(ConfigReader.getDbUrl(dbConfig),
+                        ConfigReader.getDbUser(dbConfig),
+                        ConfigReader.getDbPassword(dbConfig)
+                );}
+            else {
+                DatabaseManager.setup("jdbc:postgresql://localhost:5432/postgres", "postgres", "password123");
+                System.out.println("Config file not found. Using default Docker credentials.");
+            }
+        } catch (SQLException e) {
+            System.err.println("Failed to setup database connection: " + e.getMessage());
+            return;
+        }
+        try {
+            DatabaseManager.initializeTables();
+            System.out.println("System ready and database initialized");
+        }catch (SQLException e){
+            System.err.println("Failed to initialize tables: " + e.getMessage());
+            return;
+        }
+
         try{
             int port = ConfigReader.getPort(configPath, "ProductService");
             // new InetSocketAddress(port): combine the IP address and the port number
