@@ -79,6 +79,10 @@ public class ISCSHandler implements HttpHandler {
             targetBaseUrl = userServiceUrl;
         }else if (path.startsWith("/product")){
             targetBaseUrl = productServiceUrl;
+        } else if (path.contains("/user/internal/")) {
+            targetBaseUrl = userServiceUrl;
+        }else if (path.contains("/product/internal/")) {
+            targetBaseUrl = productServiceUrl;
         } else {
                 sendResponse(exchange, 404, "Unknown Service Path".getBytes());
                 return;

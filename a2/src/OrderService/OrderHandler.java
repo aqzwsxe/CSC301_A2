@@ -83,14 +83,35 @@ public class OrderHandler implements HttpHandler {
                     signalInternalServices("restart");
                     sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
                     return;
-                }else{
+                }else if(temp_path.equals("/clear")){
                     System.out.println("OrderService: First request is " + path + ". Wiping DB.");
                     DatabaseManager.clearAllData();
                     signalInternalServices("clear");
-
+                    sendResponse(exchange, 200, "{\"status\": \"Database cleared\"}".getBytes());
+                    return;
+                }
+                else {
+                    System.out.println("OrderService: First request is " + path + ". Defaulting to WIPE.");
+                    DatabaseManager.clearAllData();
+                    signalInternalServices("clear");
                 }
             }
 
+            // if it is not the first request, we still signal others
+            // do nothing to the database
+            if(temp_path.equals("/restart")){
+                signalInternalServices("restart");
+                sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
+                return;
+
+            }
+
+            if (temp_path.equals("/clear")) {
+                DatabaseManager.clearAllData();
+                signalInternalServices("clear");
+                sendResponse(exchange, 200, "{\"status\": \"Database cleared\"}".getBytes());
+                return;
+            }
 
             if (temp_path.equals("/shutdown")){
                 System.out.println("OrderService: Shutting down all services");
@@ -103,14 +124,7 @@ public class OrderHandler implements HttpHandler {
                 return;
             }
 
-            // if it is not the first request, we still signal others
-            // do nothing to the database
-            if(temp_path.equals("/restart")){
-                signalInternalServices("restart");
-                sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
-                return;
 
-            }
 
             if(method.equalsIgnoreCase("GET") ){
                 if(path.startsWith("/user/purchased/")){

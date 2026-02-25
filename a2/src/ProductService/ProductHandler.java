@@ -121,19 +121,17 @@ public class ProductHandler implements HttpHandler {
         String body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
         String path = exchange.getRequestURI().getPath();
         String command = getJsonValue(body, "command");
-        if (command == null) {
+        if(command==null ){
+//
             if (path.contains("/restart")) command = "restart";
             else if (path.contains("/shutdown")) command = "shutdown";
-        }
-
-        if (command == null) {
-            sendResponse(exchange, 400, errorResponse);
-            return;
-        } else {
-            if (command.isEmpty()) {
-                sendResponse(exchange, 400, errorResponse);
-                return;
+            else if (path.contains("/clear")) {
+                command = "clear";
             }
+        }
+        if(command == null){
+            sendResponse(exchange, 400, "{\"error\": \"No command found\"}");
+            return;
         }
 
         switch (command){

@@ -35,6 +35,10 @@ public class UserHandler implements HttpHandler {
         String path = exchange.getRequestURI().getPath();
         System.out.println("[User] method: " + method);
         System.out.println("[User] path: " + path);
+        if (path.contains("/internal/")) {
+            handleInternalSignal(exchange, path);
+            return;
+        }
         try {
             if(method.equals("GET")){
                 System.out.println("Try to call handle get");
@@ -47,6 +51,23 @@ public class UserHandler implements HttpHandler {
         }
     }
 
+    private void handleInternalSignal(HttpExchange exchange, String path) throws IOException {
+        if (path.endsWith("/clear")) {
+            try {
+                DatabaseManager.clearAllData();
+                User.id_counter.set(0);
+                sendResponse(exchange, 200, "{}");
+            } catch (SQLException e) {
+                sendResponse(exchange, 500, "{}");
+            }
+        } else if (path.endsWith("/restart")) {
+            sendResponse(exchange, 200, "{}");
+        } else if (path.endsWith("/shutdown")) {
+            sendResponse(exchange, 200, "{}");
+            new Thread(() -> {
+                try { Thread.sleep(200); System.exit(0); } catch (Exception ignored) {}
+            }).start();
+        }}
     /**
      * Hash the input string using SHA256
      *
@@ -171,8 +192,14 @@ public class UserHandler implements HttpHandler {
 //
             if (path.contains("/restart")) command = "restart";
             else if (path.contains("/shutdown")) command = "shutdown";
+            else if (path.contains("/clear")) {
+                command = "clear";
+            }
         }
-
+        if(command == null){
+            sendResponse(exchange, 400, "{\"error\": \"No command found\"}");
+            return;
+        }
         switch (command){
             case "clear":
                 DatabaseManager.clearAllData();
