@@ -9,7 +9,7 @@ import java.util.Map;
 
 public class DatabaseManager {
     private static String dbUrl = "jdbc:sqlite:301A2.db?timeout=5000";
-    private static DBConfig config = DBConfig.load1();
+//    private static DBConfig config = DBConfig.load1();
 
 
     private static Connection getConnection() throws SQLException{
@@ -41,7 +41,7 @@ public class DatabaseManager {
 //            e.printStackTrace();
 //        }
 //    }
-    public static void setup(String url, String user, String pass) throws SQLException{
+    public static void setup(String url) throws SQLException{
         dbUrl = url;
     }
 

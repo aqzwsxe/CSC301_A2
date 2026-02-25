@@ -44,12 +44,10 @@ public class OrderService {
         File dbFile = new File(dbConfig);
         try {
             if(dbFile.exists()){
-            DatabaseManager.setup(ConfigReader.getDbUrl(dbConfig),
-                        ConfigReader.getDbUser(dbConfig),
-                        ConfigReader.getDbPassword(dbConfig)
+            DatabaseManager.setup(ConfigReader.getDbUrl(dbConfig)
                     );}
             else {
-                DatabaseManager.setup("jdbc:postgresql://localhost:5432/postgres", "postgres", "password123");
+                DatabaseManager.setup("jdbc:sqlite:service_data.db");
                 System.out.println("Config file not found. Using default Docker credentials.");
             }
         } catch (SQLException e) {

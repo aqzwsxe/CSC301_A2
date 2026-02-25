@@ -45,12 +45,10 @@ public class UserService {
         String dbConfig = (args.length > 1) ? args[1] : "dbConfig.json";
         java.io.File dbFile = new java.io.File(dbConfig);
         if(dbFile.exists()){
-            DatabaseManager.setup(ConfigReader.getDbUrl(dbConfig),
-                        ConfigReader.getDbUser(dbConfig),
-                        ConfigReader.getDbPassword(dbConfig)
+            DatabaseManager.setup(ConfigReader.getDbUrl(dbConfig)
                     );
         }else {
-            DatabaseManager.setup("jdbc:postgresql://localhost:5432/postgres", "postgres", "password123");
+            DatabaseManager.setup("jdbc:sqlite:service_data.db");
         }
         try{
             DatabaseManager.initializeTables();

@@ -1,9 +1,13 @@
 #!/bin/bash
-echo "User table"
-docker exec -t my-postgres psql -U postgres -d postgres -c "SELECT * FROM users;"
 
-echo -e "\n Product table"
-docker exec -t my-postgres psql -U postgres -d postgres -c "SELECT * FROM products;"
+# Define the database file name used in your DatabaseManager
+DB_FILE="service_data.db"
 
-echo -e "\n Order tables"
-docker exec -t my-postgres psql -U postgres -d postgres -c "SELECT * FROM orders;"
+echo "--- User Table ---"
+sqlite3 $DB_FILE "SELECT * FROM users;" -header -column
+
+echo -e "\n--- Product Table ---"
+sqlite3 $DB_FILE "SELECT * FROM products;" -header -column
+
+echo -e "\n--- Order Table ---"
+sqlite3 $DB_FILE "SELECT * FROM orders;" -header -column

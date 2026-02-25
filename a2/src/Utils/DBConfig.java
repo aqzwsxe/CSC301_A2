@@ -6,9 +6,8 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 
 public class DBConfig {
-    public String url = "jdbc:postgresql://localhost:5432/postgres"; // Default
-    public String user = "postgres";                                // Default
-    public String pass = "mysecretpassword";
+    public String url = "jdbc:sqlite:service_data.db"; // Default
+
 
 
     public static DBConfig load1(){
@@ -23,17 +22,17 @@ public class DBConfig {
                     System.out.println("The url: "+ pasrseUrl);
                 }
 
-                String parsedUser = getDBJsonValue(content, "user");
-                if(parsedUser != null) {
-                    config1.user = parsedUser;
-                    System.out.println("The user: "+ parsedUser);
-                }
-
-                String parsedPass = getDBJsonValue(content, "pass");
-                if(parsedPass != null) {
-                    config1.pass = parsedPass;
-//                    System.out.println("The password: "+ parsedPass);
-                }
+//                String parsedUser = getDBJsonValue(content, "user");
+//                if(parsedUser != null) {
+//                    config1.user = parsedUser;
+//                    System.out.println("The user: "+ parsedUser);
+//                }
+//
+//                String parsedPass = getDBJsonValue(content, "pass");
+//                if(parsedPass != null) {
+//                    config1.pass = parsedPass;
+////                    System.out.println("The password: "+ parsedPass);
+//                }
 
                 System.out.println("[DBConfig] Loaded custom configuration from dbConfig.json");
 
