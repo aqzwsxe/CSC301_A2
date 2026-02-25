@@ -70,14 +70,15 @@ public class OrderHandler implements HttpHandler {
         byte[] requestBody = exchange.getRequestBody().readAllBytes();
         String bodyString = new String(requestBody, StandardCharsets.UTF_8);
         String path = exchange.getRequestURI().getPath();
+        String temp_path = path.toLowerCase();
         System.out.println("The Order handle method: " );
         System.out.println("method "+ method);
         System.out.println("The bodyString: "+ bodyString);
         try {
             if (isFirstRequest){
                 isFirstRequest = false;
-
-                if (path.equals("/restart")){
+                if (temp_path.equals("/restart")){
+                    // Keep the database
                     System.out.println("OrderService: First is Restart. Persisting data.");
                     signalInternalServices("restart");
                     sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
@@ -90,22 +91,25 @@ public class OrderHandler implements HttpHandler {
                 }
             }
 
-            if(path.equals("/restart")){
-                    System.out.println("OrderService: Manual Restart. Wiping DB and signaling others.");
-                    signalInternalServices("restart");
-                    sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
-                    return;
 
-            }
-
-            if (path.equals("/shutdown")){
+            if (temp_path.equals("/shutdown")){
                 System.out.println("OrderService: Shutting down all services");
                 signalInternalServices("shutdown");
                 sendResponse(exchange, 200, "{\"status\": \"Shutting down\"}".getBytes());
                 new Thread(() -> {
-                    try { Thread.sleep(500); System.exit(0); } catch (Exception ignored) {}
+                    try { Thread.sleep(500); System.exit(0); }
+                    catch (Exception ignored) {}
                 }).start();
                 return;
+            }
+
+            // if it is not the first request, we still signal others
+            // do nothing to the database
+            if(temp_path.equals("/restart")){
+                signalInternalServices("restart");
+                sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
+                return;
+
             }
 
             if(method.equalsIgnoreCase("GET") ){
@@ -437,7 +441,11 @@ public class OrderHandler implements HttpHandler {
     }
 
     private void signalInternalServices(String command){
-        String[] internalRoutes = {"/user/internal/" + command, "/product/internal/"+ command};
+        String final_command = command;
+        if(command.equalsIgnoreCase("restart")|| command.equalsIgnoreCase("shutdown")){
+            final_command = command.toLowerCase();
+        }
+        String[] internalRoutes = {"/user/internal/" + final_command, "/product/internal/"+ final_command};
 
         for(String route: internalRoutes){
             try {

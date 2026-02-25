@@ -8,17 +8,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class DatabaseManager {
-    private static String dbUser="postgres";
-    private static String dbPass="password123";
-    private static String dbUrl="jdbc:postgresql://localhost:5432/postgres";;
+    private static String dbUrl = "jdbc:sqlite:301A2.db?timeout=5000";
     private static DBConfig config = DBConfig.load1();
 
 
     private static Connection getConnection() throws SQLException{
-        String url = (dbUrl != null) ? dbUrl : config.url;
-        String user = (dbUser != null) ? dbUser : config.user;
-        String pass = (dbPass != null) ? dbPass : config.pass;
-        return DriverManager.getConnection(url, user, pass);
+        Connection connection = DriverManager.getConnection(dbUrl);
+        try(Statement statement = connection.createStatement()) {
+            statement.execute("PRAGMA foreign_keys = ON;");        }
+        return connection;
     }
 //    public static void setUpTables() throws SQLException {
 //        String sqlUsers = "CREATE TABLE IF NOT EXISTS users (" +
@@ -45,16 +43,22 @@ public class DatabaseManager {
 //    }
     public static void setup(String url, String user, String pass) throws SQLException{
         dbUrl = url;
-        dbUser = user;
-        dbPass = pass;
     }
 
     public static void clearAllData() throws SQLException{
         try(Connection connection=getConnection();
             Statement stat = connection.createStatement();
         ) {
+            stat.executeUpdate("DELETE FROM orders;");
+            stat.executeUpdate("DELETE FROM products;");
+            stat.executeUpdate("DELETE FROM users;");
 
-            stat.executeUpdate("TRUNCATE TABLE orders, products, users RESTART IDENTITY;");
+            try {
+                stat.executeUpdate("DELETE FROM sqlite_sequence WHERE name IN ('orders', 'products', 'users');");
+            }catch (SQLException e){
+
+            }
+
         }
     }
 
@@ -90,8 +94,6 @@ public class DatabaseManager {
                     order.setId(rs.getInt("id"));
                     return order;
                 }
-            } catch (Exception e) {
-
             }
         } catch (SQLException e) {
             System.err.println("Error fetching order " + orderId + ": " + e.getMessage());
@@ -102,14 +104,15 @@ public class DatabaseManager {
 
 
     public static int saveUser(String name, String email) throws SQLException{
-        String sql = "INSERT INTO users (username, email) VALUES (?, ?) RETURNING id";
+        String sql = "INSERT INTO users (username, email, password) VALUES (?, ?, 'default')";
         try(Connection connection = getConnection();
-            PreparedStatement preparedStatement = connection.prepareStatement(sql);
+            PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)
         ){
             preparedStatement.setString(1,name);
             preparedStatement.setString(2,email);
+            preparedStatement.executeUpdate();
 
-            try(ResultSet rs = preparedStatement.executeQuery()){
+            try(ResultSet rs = preparedStatement.getGeneratedKeys()){
                 if(rs.next()){
                     return rs.getInt(1);
                 }
@@ -184,6 +187,22 @@ public class DatabaseManager {
         }
     }
 
+    public static void updateProduct(int id, String name, String description, float price, int quantity){
+        String sql = "UPDATE products SET name = ?, description = ?, price = ?, quantity = ? WHERE id = ?";
+        try(Connection connection = getConnection();
+            PreparedStatement preparedStatement = connection.prepareStatement(sql)
+        ) {
+           preparedStatement.setString(1, name);
+           preparedStatement.setString(2, description);
+           preparedStatement.setFloat(3, price);
+           preparedStatement.setInt(4, quantity);
+           preparedStatement.setInt(5, id);
+           preparedStatement.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public static void updateOrderStatus(int orderId, String status){
         String sql = "UPDATE orders SET status = ? WHERE id = ?";
         try(Connection conn = getConnection();
@@ -191,13 +210,7 @@ public class DatabaseManager {
         ) {
             preparedStatement.setString(1, status);
             preparedStatement.setInt(2, orderId);
-
-            int affectedRows = preparedStatement.executeUpdate();
-            if(affectedRows > 0){
-                System.out.println("Order " + orderId + " update to status: " + status);
-            } else{
-                System.err.println("No order found with ID: " + orderId);
-            }
+            preparedStatement.executeUpdate();
         } catch (SQLException e) {
             System.err.println("Error updating order status: " + e.getMessage());
         }
@@ -214,9 +227,10 @@ public class DatabaseManager {
             PreparedStatement preparedStatement = connection.prepareStatement(sql)
         ){
             preparedStatement.setInt(1,userId);
-            ResultSet rs = preparedStatement.executeQuery();
-            while (rs.next()){
-                purchases.put(rs.getInt("product_id"),rs.getInt("total_qty"));
+            try (ResultSet rs = preparedStatement.executeQuery();) {
+                while (rs.next()){
+                    purchases.put(rs.getInt("product_id"),rs.getInt("total_qty"));
+                }
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -229,46 +243,32 @@ public class DatabaseManager {
         String updateStockSql = "UPDATE products SET quantity = ? WHERE id = ?";
         String insertOrderSql = "INSERT INTO orders (product_id, user_id, quantity, status) VALUES (?, ?, ?, 'Success')";
 
-        Connection conn = null;
 
-        try {
-            conn = getConnection();
+
+        try(Connection conn = getConnection()) {
             conn.setAutoCommit(false);
 
-            try(PreparedStatement updateStmt = conn.prepareStatement(updateStockSql)) {
+            try(PreparedStatement updateStmt = conn.prepareStatement(updateStockSql);
+            PreparedStatement insertStmt = conn.prepareStatement(insertOrderSql)
+            ) {
                 updateStmt.setInt(1, newStock);
                 updateStmt.setInt(2, prodId);
                 updateStmt.executeUpdate();
-            }
 
-            try(PreparedStatement insertStmt = conn.prepareStatement(insertOrderSql)) {
                 insertStmt.setInt(1,prodId);
                 insertStmt.setInt(2, userId);
                 insertStmt.setInt(3, qty);
                 insertStmt.executeUpdate();
+                conn.commit();
+                return  true;
+            }
+            catch (SQLException e){
+                conn.rollback();
+                return false;
             }
 
-            conn.commit();
-            return  true;
         } catch (SQLException e) {
-            if(conn != null){
-                try{
-                    conn.rollback();
-                }catch (SQLException ex){
-                    ex.printStackTrace();
-                }
-            }
-            System.err.println("Order failed, transaction rolled back: " + e.getMessage());
             return false;
-        }finally {
-            if(conn != null){
-                try {
-                    conn.setAutoCommit(true);
-                    conn.close();
-                }catch (SQLException e){
-                    e.printStackTrace();
-                }
-            }
         }
     }
 
@@ -276,44 +276,34 @@ public class DatabaseManager {
         String updateStockSql = "UPDATE products SET quantity = ? WHERE id = ?";
         String updateOrderSql = "UPDATE orders SET status = 'Cancelled' WHERE id = ?";
 
-        Connection conn = null;
-        try { conn = getConnection();
+
+        try(Connection conn = getConnection();) {
               conn.setAutoCommit(false);
 
-              try(PreparedStatement ps1 = conn.prepareStatement(updateStockSql)) {
+              try(PreparedStatement ps1 = conn.prepareStatement(updateStockSql);
+                  PreparedStatement ps2 = conn.prepareStatement(updateOrderSql)
+              ) {
                   ps1.setInt(1, restoredStock);
                   ps1.setInt(2, prodId);
                   ps1.executeUpdate();
-              } catch (SQLException e) {
-                  throw new RuntimeException(e);
-              }
 
-              try(PreparedStatement ps2 = conn.prepareStatement(updateOrderSql)) {
                   ps2.setInt(1, orderId);
                   ps2.executeUpdate();
+                  conn.commit();
+                  return true;
+              }catch (SQLException e){
+                  conn.rollback();
+                  return false;
               }
 
-              conn.commit();
-              return true;
+
 
         }catch (SQLException e){
-            if(conn != null){
-                try {
-                    conn.rollback();
-                }catch (SQLException ex){}
+
                 return false;
-            }
-        }finally {
-            if(conn != null){
-                try {
-                    conn.setAutoCommit(true);
-                    conn.close();
-                }catch (SQLException e){
-                    e.printStackTrace();
-                }
-            }
+
         }
-        return false;
+
     }
 
 
@@ -350,8 +340,6 @@ public class DatabaseManager {
                     );
                 }
             }
-        } catch (SQLException e) {
-            System.err.println("Error fetching user: " + e.getMessage());
         }
         return null;
     }
@@ -359,25 +347,25 @@ public class DatabaseManager {
 
     public static void initializeTables() throws SQLException {
         String userTable = "CREATE TABLE IF NOT EXISTS users (" +
-                "id INT PRIMARY KEY, " +
+                "id INTEGER PRIMARY KEY, " +
                 "username TEXT NOT NULL, " +
                 "email TEXT NOT NULL, " +
                 "password TEXT NOT NULL" +
                 ");";
 
         String productTable = "CREATE TABLE IF NOT EXISTS products (" +
-                "id INT PRIMARY KEY, " +
+                "id INTEGER PRIMARY KEY, " +
                 "name TEXT NOT NULL, " +
                 "description TEXT, " +
-                "price FLOAT NOT NULL, " +
-                "quantity INT NOT NULL" +
+                "price REAL NOT NULL, " + // FLOAT -> REAL
+                "quantity INTEGER NOT NULL" +
                 ");";
 
         String orderTable = "CREATE TABLE IF NOT EXISTS orders (" +
-                "id SERIAL PRIMARY KEY, " + // Use SERIAL for auto-incrementing IDs
-                "product_id INT NOT NULL, " +
-                "user_id INT NOT NULL, " +
-                "quantity INT NOT NULL, " +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " + // SERIAL -> AUTOINCREMENT
+                "product_id INTEGER NOT NULL, " +
+                "user_id INTEGER NOT NULL, " +
+                "quantity INTEGER NOT NULL, " +
                 "status TEXT NOT NULL, " +
                 "FOREIGN KEY (product_id) REFERENCES products(id), " +
                 "FOREIGN KEY (user_id) REFERENCES users(id)" +

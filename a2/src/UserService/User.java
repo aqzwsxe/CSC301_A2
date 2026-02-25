@@ -45,9 +45,7 @@ public class User implements Serializable {
     }
 
     public User(String username, String email, String password){
-        this.username = username;
-        this.email = email;
-        this.password = password;
+        this(0, username, email, password);
     }
 
     public Map<Integer, Integer> getPurchasedItems(){
@@ -145,7 +143,9 @@ public class User implements Serializable {
      * @return a JSON string containing the user's ID, username, and email
      */
     public String toJson() {
+        String escapedUsername = this.username.replace("\"", "\\\"");
+        String escapedEmail = this.email.replace("\"", "\\\"");
         return String.format("{\"id\": %d, \"username\": \"%s\", \"email\": \"%s\"}",
-                this.id, this.username, this.email);
+                this.id, escapedUsername, escapedEmail);
     }
 }

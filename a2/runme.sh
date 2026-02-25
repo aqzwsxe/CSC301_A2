@@ -6,7 +6,7 @@ CONFIG="config.json"
 OUT_DIR="compiled"
 SRC_DIR="src"
 LIB_DIR="lib"
-JDBC_JAR="$LIB_DIR/postgresql-42.7.2.jar"
+JDBC_JAR="$LIB_DIR/sqlite-jdbc-3.51.2.0.jar"
 
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
     CP_SEP=";"
@@ -37,21 +37,17 @@ case "$1" in
             compile_service "ProductService"
             compile_service "ISCS"
 
+            DB_FILE="301A2.db"
+            echo "Rebuilding SQLite Database"
 
-            echo "Rebuilding Database Container"
-            # rmove the old one if it exists
-            docker rm -f my-postgres 2>/dev/null
+            if [ -f "$DB_FILE" ]; then
+                rm "$DB_FILE"
+                echo "Removed old $DB_FILE"
+            fi
 
-            # Create the container
-            docker run -d \
-              --name my-postgres \
-              -e POSTGRES_USER=postgres \
-              -e POSTGRES_PASSWORD=password123 \
-              -e POSTGRES_DB=postgres \
-              -p 5432:5432 \
-              postgres:15
-            echo "Waiting for database to start..."
-            sleep 5
+            touch "$DB_FILE"
+
+            echo "Database file $DB_FILE is ready."
             echo "Done."
             echo  "Press enter to close"
             read

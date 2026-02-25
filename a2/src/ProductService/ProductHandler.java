@@ -29,6 +29,10 @@ public class ProductHandler implements HttpHandler {
     public void handle(HttpExchange exchange) throws IOException {
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
+        if(path.contains("/internal/")){
+            handleInternalSignal(exchange, path);
+            return;
+        }
         try {
             if(method.equals("GET")){
                 handleGet(exchange,path);
@@ -36,8 +40,24 @@ public class ProductHandler implements HttpHandler {
                 handlePost(exchange);
             }
         } catch (Exception e){
-
+            sendResponse(exchange, 400, errorResponse);
         }
+    }
+
+    private void handleInternalSignal(HttpExchange exchange, String path) throws IOException {
+        if(path.endsWith("/clear")){
+            try {
+                DatabaseManager.clearAllData();
+            } catch (SQLException e) {
+            }
+        }else if(path.endsWith("/shutdown")){
+            sendResponse(exchange, 200, "{}\n");
+            new Thread(() -> {
+                try { Thread.sleep(200); System.exit(0); } catch (Exception ignored) {}
+            }).start();
+            return;
+        }
+        sendResponse(exchange, 200, "{}\n");
     }
 
     /**
@@ -399,7 +419,7 @@ public class ProductHandler implements HttpHandler {
                 return;
             }
         }
-        DatabaseManager.saveProduct(product.getPid(),product.getName(),product.getDescription(),product.getPrice(),product.getQuantity());
+        DatabaseManager.updateProduct(product.getPid(),product.getName(),product.getDescription(),product.getPrice(),product.getQuantity());
         sendResponse(exchange, 200, product.toJson());
         return;
     }

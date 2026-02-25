@@ -110,13 +110,13 @@ public class UserHandler implements HttpHandler {
         try {
             int id = Integer.parseInt(parts[2]);
             User user = DatabaseManager.getUserById(id);
-            // 404 or 400
-            if(user==null){
-                sendResponse(exchange, 404, "{}");
-                return;
-            }
+            if(path.contains("/user/purchased/") && parts.length >= 4){
 
-            if(path.contains("/user/purchased/")){
+                if (user==null){
+                    sendResponse(exchange, 404, "{}");
+                    return;
+                }
+
                 sendResponse(exchange, 200, user.purchasesToJson());
                 return;
             }
