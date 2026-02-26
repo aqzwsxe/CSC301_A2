@@ -74,6 +74,11 @@ public class ISCSHandler implements HttpHandler {
         String path = exchange.getRequestURI().getPath();
         String targetBaseUrl;
 
+        if(path.equals("/shutdown")||path.equals("/restart")||path.equals("/clear")){
+            handleInternalSignal(exchange,path);
+            return;
+        }
+
 
         if(path.startsWith("/user")){
             targetBaseUrl = userServiceUrl;
@@ -132,6 +137,30 @@ public class ISCSHandler implements HttpHandler {
             // This pushes the byte array (the actual JSON data) through that pipe
             os.write(response);
             // Becuase it is inside the try block, os.close() is auto called
+        }
+    }
+
+    private void handleInternalSignal(HttpExchange exchange, String path) throws IOException {
+        if (path.equals("/shutdown")){
+            System.out.println("[ISCS] Shutting down");
+            forwardShutdown(userServiceUrl + "/shutdown");
+            forwardShutdown(productServiceUrl + "/shutdown");
+            sendResponse(exchange, 200, "{}\n".getBytes());
+            new Thread(() -> {
+                try { Thread.sleep(200); System.exit(0); } catch (Exception ignored) {}
+            }).start();
+        }else {
+            sendResponse(exchange, 200, "{}\n".getBytes());
+        }
+    }
+
+
+    private void forwardShutdown(String url){
+        try{
+            HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
+            client.send(req, HttpResponse.BodyHandlers.discarding());
+        }catch (Exception e){
+
         }
     }
 }

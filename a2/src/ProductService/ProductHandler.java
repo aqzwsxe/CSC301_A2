@@ -52,6 +52,7 @@ public class ProductHandler implements HttpHandler {
             try {
                 DatabaseManager.clearAllData();
             } catch (SQLException e) {
+                System.err.println("Failed to clear database: " + e.getMessage());
             }
         }else if(path.endsWith("/shutdown")){
             sendResponse(exchange, 200, "{}\n");
@@ -155,6 +156,7 @@ public class ProductHandler implements HttpHandler {
                         throw new RuntimeException(e);
                     }
                 }).start();
+                return;
         }
 
         String idStr = getJsonValue(body, "id");

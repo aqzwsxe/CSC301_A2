@@ -86,8 +86,9 @@ public class WorkloadParser {
                 continue;
             }
             if(line.equalsIgnoreCase("shutdown")){
+                // Shutdown will terminate all the service, so we don't need to run the command after the shutdown
                 sendPostRequest("/shutdown", "{}");
-                continue;
+                return;
             }
 
 
