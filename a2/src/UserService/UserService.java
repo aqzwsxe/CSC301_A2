@@ -62,6 +62,10 @@ public class UserService {
             // Whenever an Http request comes in with a path that starts with /user, hand
             // it over to the UserHandler object to deal with it.
             server.createContext("/user", new UserHandler());
+            // Update for the new features
+            server.createContext("/clear", new UserHandler());
+            server.createContext("/restart", new UserHandler());
+            server.createContext("/shutdown", new UserHandler());
             // Determines how the UserServer handle concurrent requests;
             // pass Executors.newFixedThreadPool(21) to it; it now maintains a pool of 21 dedicated worker threads
             // it now maintains a pool of 21 dedicated worker thread

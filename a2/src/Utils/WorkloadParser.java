@@ -55,10 +55,8 @@ public class WorkloadParser {
         String configPath = "config.json";
         int port = ConfigReader.getPort(configPath, "OrderService");
         String ip = ConfigReader.getIp(configPath, "OrderService").replace("\"", "").trim();;
-        ip = ip.replace("\"","").trim();
         orderUrl = "http://" + ip + ":" + port;
         // This tell if the user just typed ./runme.sh -w
-        String isFirstRun = System.getenv("IS_FIRST_RUN");
         // Ensure the decision logic only runs for line 1 of the workload file
         boolean firstRequestSent = false;
         while (sc.hasNextLine()) {
@@ -77,10 +75,7 @@ public class WorkloadParser {
                     firstRequestSent = true;
                     continue;
                 }else {
-                    if("true".equals(isFirstRun)){
-                        sendPostRequest("/clear", "{}");
-                        isFirstRun = "false";
-                    }
+                    sendPostRequest("/clear", "{}");
                     firstRequestSent = true;
                 }
             }

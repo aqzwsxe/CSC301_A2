@@ -68,6 +68,10 @@ public class ProductService {
             // Whenever an Http request comes in with a path that starts with /product, hand
             // it over to the ProductHandler object to deal with it.
             server.createContext("/product", new ProductHandler());
+            // new features
+            server.createContext("/clear", new ProductHandler());
+            server.createContext("/restart", new ProductHandler());
+            server.createContext("/shutdown", new ProductHandler());
             // Determines how the ProductServer handle concurrent requests;
             // Executor: decide
             server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));

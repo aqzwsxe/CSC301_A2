@@ -35,7 +35,10 @@ public class UserHandler implements HttpHandler {
         String path = exchange.getRequestURI().getPath();
         System.out.println("[User] method: " + method);
         System.out.println("[User] path: " + path);
-        if (path.contains("/internal/")) {
+        if (path.contains("/internal/") ||
+                path.equals("/clear") ||
+                path.equals("/restart") ||
+                path.equals("/shutdown")) {
             handleInternalSignal(exchange, path);
             return;
         }
@@ -127,10 +130,19 @@ public class UserHandler implements HttpHandler {
             sendResponse(exchange, 400, "{}");
             return;
         }
-
+        int id;
         try {
-            int id = Integer.parseInt(parts[2]);
+            id = Integer.parseInt(parts[parts.length - 1]);
+        } catch (Exception e) {
+            sendResponse(exchange, 400, "{}");
+            return;
+        }
+        try {
             User user = DatabaseManager.getUserById(id);
+            if (user == null) {
+                sendResponse(exchange, 404, "{}");
+                return; // Stop here! Don't try to get the password.
+            }
             if(path.contains("/user/purchased/") && parts.length >= 4){
 
                 if (user==null){
@@ -184,18 +196,13 @@ public class UserHandler implements HttpHandler {
         String body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
 //        System.out.println("inside the handlePost: "+body);
         String path = exchange.getRequestURI().getPath();
-
+        if (path.contains("/internal/")) {
+            handleInternalSignal(exchange, path);
+            return;
+        }
         String command = getJsonValue(body, "command");
         String idStr = getJsonValue(body, "id");
         // this part handles create and delete and update
-        if(command==null ){
-//
-            if (path.contains("/restart")) command = "restart";
-            else if (path.contains("/shutdown")) command = "shutdown";
-            else if (path.contains("/clear")) {
-                command = "clear";
-            }
-        }
         if(command == null){
             sendResponse(exchange, 400, "{\"error\": \"No command found\"}");
             return;

@@ -83,6 +83,7 @@ case "$1" in
             # Check if the workload file was provided
             if [ -z "$2" ]; then
                 echo "Error: Please provide a workload file"
+
             else
                 echo "Starting Workload Parser with file: $2"
                 java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" Utils.WorkloadParser "$2"

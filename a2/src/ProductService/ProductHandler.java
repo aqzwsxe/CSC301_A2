@@ -29,8 +29,11 @@ public class ProductHandler implements HttpHandler {
     public void handle(HttpExchange exchange) throws IOException {
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
-        if(path.contains("/internal/")){
-            handleInternalSignal(exchange, path);
+        if (path.contains("/internal/") ||
+                path.equals("/clear") ||
+                path.equals("/restart") ||
+                path.equals("/shutdown")) {
+            handleInternalSignal(exchange, path); // Ensure this method exists and resets DB/Id counters
             return;
         }
         try {
@@ -81,7 +84,7 @@ public class ProductHandler implements HttpHandler {
             sendResponse(exchange, 400, errorResponse);
             return;
         }
-        String idStr = parts[2];
+        String idStr = parts[parts.length - 1];
 
 
         int id;
