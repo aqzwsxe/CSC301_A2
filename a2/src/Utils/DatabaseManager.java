@@ -86,11 +86,23 @@ public class DatabaseManager {
             preparedStatement.setInt(1, orderId);
             try (ResultSet rs = preparedStatement.executeQuery()) {
                 if(rs.next()){
-                    Order order = new Order(rs.getInt("product_id"),
-                                        rs.getInt("user_id"),
-                                        rs.getInt("quantity"),
-                                        rs.getString("status")
-                            );
+                    // Handle Deleted Product
+                    int prodId = rs.getInt("product_id");
+                    if (rs.wasNull()) {
+                        prodId = -1; // -1 represents a deleted product
+                    }
+
+                    //Handle Deleted User
+                    int userId = rs.getInt("user_id");
+                    if (rs.wasNull()) {
+                        userId = -1; // -1 represents a deleted user
+                    }
+
+                    Order order = new Order(prodId, // Uses handled variable
+                            userId, // Uses handled variable
+                            rs.getInt("quantity"),
+                            rs.getString("status")
+                    );
                     order.setId(rs.getInt("id"));
                     return order;
                 }
@@ -357,7 +369,7 @@ public class DatabaseManager {
                 "id INTEGER PRIMARY KEY, " +
                 "name TEXT NOT NULL, " +
                 "description TEXT, " +
-                "price REAL NOT NULL, " + // FLOAT -> REAL
+                "price REAL NOT NULL, " +
                 "quantity INTEGER NOT NULL" +
                 ");";
 
