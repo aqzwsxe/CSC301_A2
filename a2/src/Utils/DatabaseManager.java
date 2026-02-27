@@ -251,28 +251,47 @@ public class DatabaseManager {
     }
 
 
-    public static boolean placeOrder(int prodId, int userId, int qty, int newStock){
-        String updateStockSql = "UPDATE products SET quantity = ? WHERE id = ?";
+    public static boolean placeOrder(int prodId, int userId, int qty){
+        String checkStockSql = "SELECT quantity FROM products WHERE id = ?";
+        String updateStockSql = "UPDATE products SET quantity = quantity - ? WHERE id = ?";
         String insertOrderSql = "INSERT INTO orders (product_id, user_id, quantity, status) VALUES (?, ?, ?, 'Success')";
-
-
 
         try(Connection conn = getConnection()) {
             conn.setAutoCommit(false);
 
-            try(PreparedStatement updateStmt = conn.prepareStatement(updateStockSql);
+            try(PreparedStatement checkStmt = conn.prepareStatement(checkStockSql);
+                    PreparedStatement updateStmt = conn.prepareStatement(updateStockSql);
             PreparedStatement insertStmt = conn.prepareStatement(insertOrderSql)
             ) {
-                updateStmt.setInt(1, newStock);
+
+                checkStmt.setInt(1, prodId);
+                try (ResultSet rs = checkStmt.executeQuery()) {
+                    if (rs.next()) {
+                        int currentStock = rs.getInt("quantity");
+                        if (currentStock < qty) {
+                            conn.rollback();
+                            return false; // Not enough stock
+                        }
+                    } else {
+                        conn.rollback();
+                        return false; // Product does not exist
+                    }
+                }
+
+                // Reduce stock
+                updateStmt.setInt(1, qty);
                 updateStmt.setInt(2, prodId);
                 updateStmt.executeUpdate();
 
-                insertStmt.setInt(1,prodId);
+                // Insert order
+                insertStmt.setInt(1, prodId);
                 insertStmt.setInt(2, userId);
                 insertStmt.setInt(3, qty);
                 insertStmt.executeUpdate();
+
                 conn.commit();
-                return  true;
+                return true;
+
             }
             catch (SQLException e){
                 conn.rollback();

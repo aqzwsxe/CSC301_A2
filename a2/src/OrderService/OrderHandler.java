@@ -326,8 +326,7 @@ public class OrderHandler implements HttpHandler {
             boolean transactionSuccess = DatabaseManager.placeOrder(
                     Integer.parseInt(productId),
                     Integer.parseInt(userId),
-                    quantity,
-                    newStock
+                    quantity
             );
             if(transactionSuccess){
                 String successJson = String.format(
