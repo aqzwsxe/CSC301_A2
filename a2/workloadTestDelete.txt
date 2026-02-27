@@ -1,4 +1,5 @@
 USER create 1 username1 fzh@gmail.com 12345
+USER create 2 username2 fzh1@gmail.com 12355
 PRODUCT create 2 p2 product2 76 12
 ORDER place 2 1 7
 PRODUCT delete 2 p2 76 5
