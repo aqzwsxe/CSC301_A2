@@ -363,12 +363,12 @@ public class DatabaseManager {
 
         String orderTable = "CREATE TABLE IF NOT EXISTS orders (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "product_id INTEGER NOT NULL, " +
-                "user_id INTEGER NOT NULL, " +
+                "product_id INTEGER, " + // Removed NOT NULL
+                "user_id INTEGER, " +    // Removed NOT NULL
                 "quantity INTEGER NOT NULL, " +
                 "status TEXT NOT NULL, " +
-                "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE NO ACTION, " +
-                "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE NO ACTION" +
+                "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL, " +
+                "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL" +
                 ");";
         try (Connection conn = getConnection();
              Statement statement = conn.createStatement()
