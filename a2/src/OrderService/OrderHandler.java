@@ -314,6 +314,13 @@ public class OrderHandler implements HttpHandler {
                 sendError(exchange, 404, "Invalid Request");
                 return;
             }
+            // Check the status
+            String prodStatus = getJsonValue(prodRes.body(), "status");
+            if(prodStatus != null && prodStatus.equals("deleted")) {
+                sendError(exchange, 404, "Product is deleted");
+                return;
+            }
+
             int availableQuantity = Integer.parseInt(getJsonValue(prodRes.body(), "quantity"));
             if(quantity > availableQuantity){
                 sendError(exchange, 400, "Exceeded quantity limit");

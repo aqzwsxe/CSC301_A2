@@ -150,7 +150,7 @@ public class DatabaseManager {
     }
 
     public static Product  getProductById(int productId){
-        String sql = "SELECT * FROM products WHERE id = ?";
+        String sql = "SELECT * FROM products WHERE id = ? AND status = 'active'";
         try(Connection connection = getConnection();
             PreparedStatement preparedStatement = connection.prepareStatement(sql)
         ) {
@@ -173,19 +173,24 @@ public class DatabaseManager {
     }
 
     public  static void deleteProduct(int id, String name, float price, int quantity){
-        String sql = "DELETE FROM products WHERE id = ? AND name = ? AND price = ? AND quantity = ?";
+        String sql = "UPDATE products SET status = 'deleted' WHERE id = ? AND name = ? AND price = ? AND quantity = ?";
         try(Connection connection = getConnection();
             PreparedStatement preparedStatement = connection.prepareStatement(sql)
         ) {
-            preparedStatement.setInt(1,id);
+            preparedStatement.setInt(1, id);
             preparedStatement.setString(2, name);
             preparedStatement.setFloat(3, price);
             preparedStatement.setInt(4, quantity);
-            preparedStatement.executeUpdate();
+            int rowsAffected = preparedStatement.executeUpdate();
+
+            if (rowsAffected == 0) {
+                throw new SQLException("Product not found or fields did not match.");
+            }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
+
     public static void updateProductQuantity(int productId, int newQuantity){
         String sql = "UPDATE products SET quantity = ? WHERE id = ?";
         try(Connection connection=getConnection();
@@ -252,8 +257,8 @@ public class DatabaseManager {
 
 
     public static boolean placeOrder(int prodId, int userId, int qty){
-        String checkStockSql = "SELECT quantity FROM products WHERE id = ?";
-        String updateStockSql = "UPDATE products SET quantity = quantity - ? WHERE id = ?";
+        String checkStockSql = "SELECT quantity FROM products WHERE id = ? AND status = 'active'";
+        String updateStockSql = "UPDATE products SET quantity = quantity - ? WHERE id = ? AND status = 'active'";
         String insertOrderSql = "INSERT INTO orders (product_id, user_id, quantity, status) VALUES (?, ?, ?, 'Success')";
 
         try(Connection conn = getConnection()) {
@@ -381,7 +386,8 @@ public class DatabaseManager {
                 "id INTEGER PRIMARY KEY, " +
                 "username TEXT NOT NULL, " +
                 "email TEXT NOT NULL, " +
-                "password TEXT NOT NULL" +
+                "password TEXT NOT NULL," +
+                "status TEXT DEFAULT 'active'"+
                 ");";
 
         String productTable = "CREATE TABLE IF NOT EXISTS products (" +
@@ -389,7 +395,8 @@ public class DatabaseManager {
                 "name TEXT NOT NULL, " +
                 "description TEXT, " +
                 "price REAL NOT NULL, " +
-                "quantity INTEGER NOT NULL" +
+                "quantity INTEGER NOT NULL," +
+                "status TEXT DEFAULT 'active'"+
                 ");";
 
         String orderTable = "CREATE TABLE IF NOT EXISTS orders (" +
@@ -446,7 +453,8 @@ public class DatabaseManager {
     }
 
     public static void deleteUser(int id) throws SQLException {
-        String sql = "DELETE FROM users WHERE id = ?";
+        // Do soft delete rather than remove it directly
+        String sql = "UPDATE users SET status = 'deleted' WHERE id = ?";
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, id);
