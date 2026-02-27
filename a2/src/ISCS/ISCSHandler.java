@@ -73,8 +73,7 @@ public class ISCSHandler implements HttpHandler {
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
         String targetBaseUrl;
-        if((path.contains("/shutdown") || path.contains("/restart") || path.contains("/clear"))
-                && !path.contains("/internal/")){
+        if(path.endsWith("/shutdown") || path.endsWith("/restart") || path.endsWith("/clear")){
             System.out.println("Enter the check block");
             handleInternalSignal(exchange,path);
             return;
