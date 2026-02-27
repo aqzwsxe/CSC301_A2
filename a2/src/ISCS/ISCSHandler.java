@@ -128,7 +128,6 @@ public class ISCSHandler implements HttpHandler {
         // Telling the client (workload generator or the orderservice)
         // what kind of package it is about to receive
         // By setting the Content-Type to application/json ensure that the receiver knows to
-        // treat the bytes you send back ask JSON obj rather than plain text or binary data
         exchange.getResponseHeaders().set("Content-Type","application/json");
         // set the status (like 200) and how much is coming
         exchange.sendResponseHeaders(statusCode, response.length);
@@ -141,18 +140,30 @@ public class ISCSHandler implements HttpHandler {
     }
 
     private void handleInternalSignal(HttpExchange exchange, String path) throws IOException {
-        if (path.equals("/shutdown")){
-            System.out.println("[ISCS] Shutting down");
+        String command = path.substring(path.lastIndexOf("/") + 1);
+        System.out.println("[ISCS] Received internal signal: " + command);
+
+        if (command.equals("shutdown")) {
             forwardShutdown(userServiceUrl + "/shutdown");
             forwardShutdown(productServiceUrl + "/shutdown");
-            sendResponse(exchange, 200, "{}\n".getBytes());
+
+            byte[] response = "{\"status\": \"ISCS and backends shutting down\"}\n".getBytes();
+            sendResponse(exchange, 200, response);
+
             new Thread(() -> {
-                try { Thread.sleep(200); System.exit(0); } catch (Exception ignored) {
-                    System.err.println("The error message: " + ignored);
+                try {
+                    Thread.sleep(500);
+                    System.out.println("[ISCS] Exit 0");
+                    System.exit(0);
+                } catch (Exception e) {
+                    System.exit(1);
                 }
             }).start();
-        }else {
-            sendResponse(exchange, 200, "{}\n".getBytes());
+
+        } else if (command.equals("clear") || command.equals("restart")) {
+            forwardShutdown(userServiceUrl + "/" + command);
+            forwardShutdown(productServiceUrl + "/" + command);
+            sendResponse(exchange, 200, "{}".getBytes());
         }
     }
 
