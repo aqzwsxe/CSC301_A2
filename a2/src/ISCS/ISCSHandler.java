@@ -73,7 +73,8 @@ public class ISCSHandler implements HttpHandler {
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
         String targetBaseUrl;
-        if(path.startsWith("/shutdown")||path.startsWith("/restart")||path.startsWith("/clear")){
+        if((path.contains("/shutdown") || path.contains("/restart") || path.contains("/clear"))
+                && !path.contains("/internal/")){
             System.out.println("Enter the check block");
             handleInternalSignal(exchange,path);
             return;
@@ -139,31 +140,26 @@ public class ISCSHandler implements HttpHandler {
         }
     }
 
+    // Only for shutdown, restart and clear
     private void handleInternalSignal(HttpExchange exchange, String path) throws IOException {
-        String command = path.substring(path.lastIndexOf("/") + 1);
-        System.out.println("[ISCS] Received internal signal: " + command);
-
+        System.out.println("Run the handleInternalSignal method");
+        String command = "";
+        if (path.contains("shutdown")) command = "shutdown";
+        else if (path.contains("restart")) command = "restart";
+        else if (path.contains("clear")) command = "clear";
+        System.out.println("[ISCS] Propagating " + command + " to all backends...");
+        forwardShutdown(userServiceUrl + "/user/internal/" + command);
+        forwardShutdown(productServiceUrl + "/product/internal/" + command);
+        sendResponse(exchange, 200, ("{\"status\": \"" + command + " processed\"}").getBytes());
         if (command.equals("shutdown")) {
-            forwardShutdown(userServiceUrl + "/shutdown");
-            forwardShutdown(productServiceUrl + "/shutdown");
-
-            byte[] response = "{\"status\": \"ISCS and backends shutting down\"}\n".getBytes();
-            sendResponse(exchange, 200, response);
-
+            System.out.println("Enter the if statement; Shutdown the ISCS");
             new Thread(() -> {
                 try {
-                    Thread.sleep(500);
-                    System.out.println("[ISCS] Exit 0");
+                    Thread.sleep(1000); // Give enough time for the forward calls to finish
+                    System.out.println("[ISCS] Final Shutdown.");
                     System.exit(0);
-                } catch (Exception e) {
-                    System.exit(1);
-                }
+                } catch (Exception ignored) {}
             }).start();
-
-        } else if (command.equals("clear") || command.equals("restart")) {
-            forwardShutdown(userServiceUrl + "/" + command);
-            forwardShutdown(productServiceUrl + "/" + command);
-            sendResponse(exchange, 200, "{}".getBytes());
         }
     }
 
