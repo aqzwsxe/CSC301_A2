@@ -146,7 +146,9 @@ public class ISCSHandler implements HttpHandler {
             forwardShutdown(productServiceUrl + "/shutdown");
             sendResponse(exchange, 200, "{}\n".getBytes());
             new Thread(() -> {
-                try { Thread.sleep(200); System.exit(0); } catch (Exception ignored) {}
+                try { Thread.sleep(200); System.exit(0); } catch (Exception ignored) {
+                    System.err.println("The error message: " + ignored);
+                }
             }).start();
         }else {
             sendResponse(exchange, 200, "{}\n".getBytes());
