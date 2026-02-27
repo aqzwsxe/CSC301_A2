@@ -133,6 +133,13 @@ public class OrderHandler implements HttpHandler {
                 }else if(path.startsWith("/order/")){
                     handleGetOrder(exchange, path);
                     return;
+                }else if(path.startsWith("/user/")){
+                    handleGetUser(exchange, method, path, requestBody);
+                    return;
+                }
+                else if(path.startsWith("/product/")){
+                    handleGetProduct(exchange, method, path, requestBody);
+                    return;
                 }
             }else if(method.equalsIgnoreCase("DELETE")&& path.startsWith("/order/")){
                 handleCancelOrder(exchange, path);
@@ -149,6 +156,22 @@ public class OrderHandler implements HttpHandler {
         }
     }
 
+    private void handleGetUser(HttpExchange exchange, String method, String path, byte[] requestBody) throws IOException {
+        try {
+            // The assignment says OrderService handles user functionality by forwarding.
+            forwardToISCS(exchange, method, path, requestBody);
+        } catch (InterruptedException e) {
+            sendError(exchange, 500, "Internal Server Error");
+        }
+    }
+
+    private void handleGetProduct(HttpExchange exchange, String method, String path, byte[] requestBody) throws IOException {
+        try {
+            forwardToISCS(exchange, method, path, requestBody);
+        } catch (InterruptedException e) {
+            sendError(exchange, 500, "Internal Server Error");
+        }
+    }
     /**
      * Get order information based on order id
      *
