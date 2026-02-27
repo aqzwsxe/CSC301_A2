@@ -362,20 +362,24 @@ public class DatabaseManager {
                 ");";
 
         String orderTable = "CREATE TABLE IF NOT EXISTS orders (" +
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, " + // SERIAL -> AUTOINCREMENT
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
                 "product_id INTEGER NOT NULL, " +
                 "user_id INTEGER NOT NULL, " +
                 "quantity INTEGER NOT NULL, " +
                 "status TEXT NOT NULL, " +
-                "FOREIGN KEY (product_id) REFERENCES products(id), " +
-                "FOREIGN KEY (user_id) REFERENCES users(id)" +
+                "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE NO ACTION, " +
+                "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE NO ACTION" +
                 ");";
         try (Connection conn = getConnection();
              Statement statement = conn.createStatement()
         ){
+            statement.execute("PRAGMA foreign_keys = ON;");
             statement.execute(userTable);
             statement.execute(productTable);
             statement.execute(orderTable);
+            // prevent the full table scan
+            statement.execute("CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);");
+            statement.execute("CREATE INDEX IF NOT EXISTS idx_orders_product ON orders(product_id);");
             System.out.println("[DatabaseManager] Tables initialized successfully.");
 
         } catch (SQLException e){
