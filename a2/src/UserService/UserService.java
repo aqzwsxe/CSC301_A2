@@ -22,10 +22,6 @@ public class UserService {
 //    Use ConcurrentHashMap instead rather than HashMap, because server is multi-threaded
 //    create an interface or super-class, the map is the placeholder; when receive the new requirement; create
     // the actual subclass for the database
-    /**
-     * This is the database to store all the Users
-     */
-    public static Map<Integer, User> userDatabase = PersistenceManager.loadServiceData("user.ser", User.id_counter);
 
     /**
      * The main execution point that starts the User microservice
@@ -45,9 +41,20 @@ public class UserService {
         }
 
         String configPath = args[0];
-
-        DatabaseManager.initializeTables();
+        // Initialize DB connection
+        String dbConfig = (args.length > 1) ? args[1] : "dbConfig.json";
+        java.io.File dbFile = new java.io.File(dbConfig);
+        if(dbFile.exists()){
+            DatabaseManager.setup(ConfigReader.getDbUrl(dbConfig)
+                    );
+        }else {
+//            DatabaseManager.setup("jdbc:sqlite:service_data.db");
+            DatabaseManager.setup("jdbc:sqlite:301A2.db");
+            System.out.println("301A2.db not found. Create 301A2.db.");
+        }
         try{
+            DatabaseManager.initializeTables();
+            System.out.println("[Database] Connection and tables verified.");
             int port = ConfigReader.getPort(configPath, "UserService");
             // new InetSocketAddress(port): combine the IP address and the port number
             // Don't really need to specify the ip address
@@ -57,6 +64,10 @@ public class UserService {
             // Whenever an Http request comes in with a path that starts with /user, hand
             // it over to the UserHandler object to deal with it.
             server.createContext("/user", new UserHandler());
+            // Update for the new features
+            server.createContext("/clear", new UserHandler());
+            server.createContext("/restart", new UserHandler());
+            server.createContext("/shutdown", new UserHandler());
             // Determines how the UserServer handle concurrent requests;
             // pass Executors.newFixedThreadPool(21) to it; it now maintains a pool of 21 dedicated worker threads
             // it now maintains a pool of 21 dedicated worker thread

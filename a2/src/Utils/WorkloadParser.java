@@ -42,6 +42,9 @@ public class WorkloadParser {
      * @throws URISyntaxException If the generated URLs are invalid
      */
     public static void main(String[] args) throws IOException, InterruptedException, URISyntaxException {
+        if (args.length == 0){
+            System.err.println("Usage: java WorkloadParser <workload_file>");
+        }
         // when run the program via terminal through runme.sh, pass the path to the text file
         // java WorkloadParser workload3u20c.txt
         // args[0] becomes workload3u20c.txt
@@ -51,12 +54,14 @@ public class WorkloadParser {
 
         String configPath = "config.json";
         int port = ConfigReader.getPort(configPath, "OrderService");
-        String ip = ConfigReader.getIp(configPath, "OrderService");
-        ip = ip.replace("\"","").trim();
+        String ip = ConfigReader.getIp(configPath, "OrderService").replace("\"", "").trim();;
         orderUrl = "http://" + ip + ":" + port;
+        // This tell if the user just typed ./runme.sh -w
+        // Ensure the decision logic only runs for line 1 of the workload file
+        boolean firstRequestSent = false;
         while (sc.hasNextLine()) {
             String line = sc.nextLine().trim();
-            if (line.isEmpty()) {
+            if (line.isEmpty() || line.startsWith("#")) {
                 continue;
             }
 
@@ -64,17 +69,38 @@ public class WorkloadParser {
                 line = line.substring(line.indexOf("]")+1).trim();
             }
 
+            if (!firstRequestSent) {
+                firstRequestSent = true;
+                if (line.equalsIgnoreCase("restart")) {
+                    sendPostRequest("/restart", "{}");
+                    // Use this line as a signal, so move to the next line
+                    continue;
+                } else {
+                    // The first line was a real command (e.g., USER create),
+                    // so we clear first, then LET THE REST OF THE LOOP handle this line.
+                    sendPostRequest("/clear", "{}");
+
+                    // Add a tiny sleep to allow services to settle
+                    Thread.sleep(50);
+                }
+            }
+
+            // restart that is not the first command
             if(line.equalsIgnoreCase("restart")){
                 sendPostRequest("/restart","{}");
                 continue;
             }
             if(line.equalsIgnoreCase("shutdown")){
+                // Shutdown will terminate all the service, so we don't need to run the command after the shutdown
                 sendPostRequest("/shutdown", "{}");
-                continue;
+                return;
             }
 
 
             String[] parts = line.split("\\s+"); // split by any whitespace
+            for (int i = 0; i < parts.length; i++) {
+                parts[i] = parts[i].trim();
+            }
             if(parts.length <2){
                 continue;
             }
@@ -139,10 +165,17 @@ public class WorkloadParser {
                     // If the id is invalid, return 400
                     Integer.parseInt(parts[2]);
                     StringBuilder json_builder = new StringBuilder(String.format("{\"command\":\"update\",\"id\":%s", parts[2]));
-                    for(int i = 3; i< parts.length; i++){
-                        String[] key_val = parts[i].split(":");
+                    for(int i = 3; i < parts.length; i++){
+                        String[] key_val = parts[i].split(":", 2);
                         if(key_val.length == 2){
-                            json_builder.append(String.format(",\"%s\":\"%s\"", key_val[0], key_val[1]));
+                            String key = key_val[0];
+                            String val = key_val[1];
+                            // Determine if value should be a string (quoted) or a number (unquoted)
+                            if(key.equals("age") || key.equals("role_id")) {
+                                json_builder.append(String.format(",\"%s\":%s", key, val));
+                            } else {
+                                json_builder.append(String.format(",\"%s\":\"%s\"", key, val));
+                            }
                         }
                     }
                     json_builder.append("}");
@@ -353,12 +386,12 @@ public class WorkloadParser {
         try {
             //System.out.println("run the sendPostRequest");
             String fullUrl = (orderUrl + endpoint).replaceAll("\\s", "");
-
+	    System.out.println("Send the request");
             HttpRequest request  = HttpRequest.newBuilder()
                     .uri(URI.create(fullUrl))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
-            //System.out.println("After the HTTPRequest");
+            System.out.println("After the HTTPRequest");
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             System.out.println("POST " + endpoint + " | Status: " + response.statusCode());
             System.out.println("Data: " + response.body());

@@ -142,7 +142,10 @@ public class Product implements Serializable {
      *
      * @return a JSON string containing the product's id, name, description, price and quantity
      */
-    public String toJson(){
+    public String toJson() {
+        String escapedDesc = this.description.replace("\"", "\\\"");
+        String escapedName = this.name.replace("\"", "\\\"");
+
         return String.format("{\n" +
                         "\"id\": %d, \n" +
                         "\"name\": \"%s\", \n" +
@@ -150,6 +153,6 @@ public class Product implements Serializable {
                         "\"price\": %.2f, \n" +
                         "\"quantity\": %d\n" +
                         "}\n",
-                this.pid, this.name, this.description, this.price, this.quantity_in_stock);
+                this.pid, escapedName, escapedDesc, this.price, this.quantity_in_stock);
     }
 }

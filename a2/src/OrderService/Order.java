@@ -1,6 +1,5 @@
 package OrderService;
 
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Represents an order with a unique id.
@@ -15,7 +14,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * </ul>
  */
 public class Order implements java.io.Serializable {
-    private static final long serialVersionUID = 1L;
 
     /**
      * The unique identifier for the product being ordered.
@@ -142,5 +140,17 @@ public class Order implements java.io.Serializable {
     public void setStatus(String new_status){
         this.status = new_status;
         return;
+    }
+
+    @Override
+    public boolean equals(Object o){
+        if(this==o){
+            return true;
+        }
+        if(o==null || getClass() != o.getClass()){
+            return false;
+        }
+        Order order = (Order) o;
+        return id == order.id;
     }
 }

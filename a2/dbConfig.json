@@ -1,7 +1,5 @@
 {
   "Database": {
-    "url": "jdbc:postgresql://localhost:5432/your_db_name",
-    "user": "your_user",
-    "pass": "your_password"
+    "url": "jdbc:sqlite:301A2.db"
   }
 }

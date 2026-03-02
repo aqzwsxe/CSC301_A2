@@ -73,11 +73,20 @@ public class ISCSHandler implements HttpHandler {
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
         String targetBaseUrl;
+        if(path.endsWith("/shutdown") || path.endsWith("/restart") || path.endsWith("/clear")){
+            System.out.println("Enter the check block");
+            handleInternalSignal(exchange,path);
+            return;
+        }
 
 
         if(path.startsWith("/user")){
             targetBaseUrl = userServiceUrl;
         }else if (path.startsWith("/product")){
+            targetBaseUrl = productServiceUrl;
+        } else if (path.contains("/user/internal/")) {
+            targetBaseUrl = userServiceUrl;
+        }else if (path.contains("/product/internal/")) {
             targetBaseUrl = productServiceUrl;
         } else {
                 sendResponse(exchange, 404, "Unknown Service Path".getBytes());
@@ -119,7 +128,6 @@ public class ISCSHandler implements HttpHandler {
         // Telling the client (workload generator or the orderservice)
         // what kind of package it is about to receive
         // By setting the Content-Type to application/json ensure that the receiver knows to
-        // treat the bytes you send back ask JSON obj rather than plain text or binary data
         exchange.getResponseHeaders().set("Content-Type","application/json");
         // set the status (like 200) and how much is coming
         exchange.sendResponseHeaders(statusCode, response.length);
@@ -128,6 +136,39 @@ public class ISCSHandler implements HttpHandler {
             // This pushes the byte array (the actual JSON data) through that pipe
             os.write(response);
             // Becuase it is inside the try block, os.close() is auto called
+        }
+    }
+
+    // Only for shutdown, restart and clear
+    private void handleInternalSignal(HttpExchange exchange, String path) throws IOException {
+        System.out.println("Run the handleInternalSignal method");
+        String command = "";
+        if (path.contains("shutdown")) command = "shutdown";
+        else if (path.contains("restart")) command = "restart";
+        else if (path.contains("clear")) command = "clear";
+        System.out.println("[ISCS] Propagating " + command + " to all backends...");
+        forwardShutdown(userServiceUrl + "/user/internal/" + command);
+        forwardShutdown(productServiceUrl + "/product/internal/" + command);
+        sendResponse(exchange, 200, ("{\"status\": \"" + command + " processed\"}").getBytes());
+        if (command.equals("shutdown")) {
+            System.out.println("Enter the if statement; Shutdown the ISCS");
+            new Thread(() -> {
+                try {
+                    Thread.sleep(1000); // Give enough time for the forward calls to finish
+                    System.out.println("[ISCS] Final Shutdown.");
+                    System.exit(0);
+                } catch (Exception ignored) {}
+            }).start();
+        }
+    }
+
+
+    private void forwardShutdown(String url){
+        try{
+            HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
+            client.send(req, HttpResponse.BodyHandlers.discarding());
+        }catch (Exception e){
+
         }
     }
 }

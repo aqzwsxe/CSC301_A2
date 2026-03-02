@@ -70,39 +70,61 @@ public class OrderHandler implements HttpHandler {
         byte[] requestBody = exchange.getRequestBody().readAllBytes();
         String bodyString = new String(requestBody, StandardCharsets.UTF_8);
         String path = exchange.getRequestURI().getPath();
+        String temp_path = path.toLowerCase();
         System.out.println("The Order handle method: " );
         System.out.println("method "+ method);
         System.out.println("The bodyString: "+ bodyString);
         try {
-            // Startup logic
-            if(isFirstRequest){
+            if (isFirstRequest){
                 isFirstRequest = false;
-                if(path.equals("/restart")){
-                    System.out.println("OrderService: First request is RESTART. Keeping DB data");
+                if (temp_path.equals("/restart")){
+                    // Keep the database
+                    System.out.println("OrderService: First is Restart. Persisting data.");
+                    signalInternalServices("restart");
                     sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
                     return;
-                } else {
-                    System.out.println("OrderService: First request is NOT restart. Wiping DB.");
+                }else if(temp_path.equals("/clear")){
+                    System.out.println("OrderService: First request is " + path + ". Wiping DB.");
                     DatabaseManager.clearAllData();
+                    signalInternalServices("clear");
+                    sendResponse(exchange, 200, "{\"status\": \"Database cleared\"}".getBytes());
+                    return;
                 }
+                //else {
+                    //System.out.println("OrderService: First request is " + path + ". Defaulting to WIPE.");
+                    //DatabaseManager.clearAllData();
+                    //signalInternalServices("clear");
+                //}
             }
 
-            if(path.equals("/shutdown")){
+            // if it is not the first request, we still signal others
+            // do nothing to the database
+            if(temp_path.equals("/restart")){
+                signalInternalServices("restart");
+                sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
+                return;
+
+            }
+
+            if (temp_path.equals("/clear")) {
+                DatabaseManager.clearAllData();
+                signalInternalServices("clear");
+                sendResponse(exchange, 200, "{\"status\": \"Database cleared\"}".getBytes());
+                return;
+            }
+
+            if (temp_path.equals("/shutdown")){
                 System.out.println("OrderService: Shutting down all services");
                 signalInternalServices("shutdown");
                 sendResponse(exchange, 200, "{\"status\": \"Shutting down\"}".getBytes());
-
-                new Thread(()->{
-                    try {
-                        // Give the response time to send, then exit
-                        Thread.sleep(500);
-                        System.exit(0);
-                    }catch (Exception ignored){
-
-                    }
+                new Thread(() -> {
+                    try { Thread.sleep(500); System.exit(0); }
+                    catch (Exception ignored) {}
                 }).start();
                 return;
             }
+
+
 
             if(method.equalsIgnoreCase("GET") ){
                 if(path.startsWith("/user/purchased/")){
@@ -110,6 +132,13 @@ public class OrderHandler implements HttpHandler {
                     return;
                 }else if(path.startsWith("/order/")){
                     handleGetOrder(exchange, path);
+                    return;
+                }else if(path.startsWith("/user/")){
+                    handleGetUser(exchange, method, path, requestBody);
+                    return;
+                }
+                else if(path.startsWith("/product/")){
+                    handleGetProduct(exchange, method, path, requestBody);
                     return;
                 }
             }else if(method.equalsIgnoreCase("DELETE")&& path.startsWith("/order/")){
@@ -127,6 +156,22 @@ public class OrderHandler implements HttpHandler {
         }
     }
 
+    private void handleGetUser(HttpExchange exchange, String method, String path, byte[] requestBody) throws IOException {
+        try {
+            // The assignment says OrderService handles user functionality by forwarding.
+            forwardToISCS(exchange, method, path, requestBody);
+        } catch (InterruptedException e) {
+            sendError(exchange, 500, "Internal Server Error");
+        }
+    }
+
+    private void handleGetProduct(HttpExchange exchange, String method, String path, byte[] requestBody) throws IOException {
+        try {
+            forwardToISCS(exchange, method, path, requestBody);
+        } catch (InterruptedException e) {
+            sendError(exchange, 500, "Internal Server Error");
+        }
+    }
     /**
      * Get order information based on order id
      *
@@ -382,16 +427,28 @@ public class OrderHandler implements HttpHandler {
         }
 
         start += pattern.length();
-        int end = json.indexOf(",", start);
-        if(end == -1){
-            end = json.indexOf("}", start);
+        // Trim potential spaces between : and value
+        while (start < json.length() && Character.isWhitespace(json.charAt(start))) {
+            start++;
         }
 
-        String value = json.substring(start,end).trim();
-
-        if(value.startsWith("\"")){
-            value = value.substring(1,value.length()-1);
+        String value;
+        if (json.charAt(start) == '\"') {
+            // Handle String values: find the closing quote
+            start++; // skip opening quote
+            int end = json.indexOf("\"", start);
+            if (end == -1) return null;
+            value = json.substring(start, end);
+        } else {
+            // Handle number/boolean values: find comma or brace
+            int end = json.indexOf(",", start);
+            if (end == -1) {
+                end = json.indexOf("}", start);
+            }
+            if (end == -1) return null;
+            value = json.substring(start, end).trim();
         }
+
         return value;
     }
 
@@ -433,7 +490,11 @@ public class OrderHandler implements HttpHandler {
     }
 
     private void signalInternalServices(String command){
-        String[] internalRoutes = {"/user/internal/" + command, "/product/internal/"+ command};
+        String final_command = command;
+        if(command.equalsIgnoreCase("restart")|| command.equalsIgnoreCase("shutdown")){
+            final_command = command.toLowerCase();
+        }
+        String[] internalRoutes = {"/user/internal/" + final_command, "/product/internal/"+ final_command};
 
         for(String route: internalRoutes){
             try {

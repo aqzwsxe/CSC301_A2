@@ -29,6 +29,13 @@ public class ProductHandler implements HttpHandler {
     public void handle(HttpExchange exchange) throws IOException {
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
+        if (path.contains("/internal/") ||
+                path.equals("/clear") ||
+                path.equals("/restart") ||
+                path.equals("/shutdown")) {
+            handleInternalSignal(exchange, path); // Ensure this method exists and resets DB/Id counters
+            return;
+        }
         try {
             if(method.equals("GET")){
                 handleGet(exchange,path);
@@ -36,8 +43,25 @@ public class ProductHandler implements HttpHandler {
                 handlePost(exchange);
             }
         } catch (Exception e){
-
+            sendResponse(exchange, 400, errorResponse);
         }
+    }
+
+    private void handleInternalSignal(HttpExchange exchange, String path) throws IOException {
+        if(path.endsWith("/clear")){
+            try {
+                DatabaseManager.clearAllData();
+            } catch (SQLException e) {
+                System.err.println("Failed to clear database: " + e.getMessage());
+            }
+        }else if(path.endsWith("/shutdown")){
+            sendResponse(exchange, 200, "{}\n");
+            new Thread(() -> {
+                try { Thread.sleep(200); System.exit(0); } catch (Exception ignored) {}
+            }).start();
+            return;
+        }
+        sendResponse(exchange, 200, "{}\n");
     }
 
     /**
@@ -61,7 +85,7 @@ public class ProductHandler implements HttpHandler {
             sendResponse(exchange, 400, errorResponse);
             return;
         }
-        String idStr = parts[2];
+        String idStr = parts[parts.length - 1];
 
 
         int id;
@@ -99,16 +123,19 @@ public class ProductHandler implements HttpHandler {
     private void handlePost(HttpExchange exchange) throws IOException, SQLException {
         InputStream is = exchange.getRequestBody();
         String body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-
+        String path = exchange.getRequestURI().getPath();
         String command = getJsonValue(body, "command");
-        if (command == null) {
-            sendResponse(exchange, 400, errorResponse);
-            return;
-        } else {
-            if (command.isEmpty()) {
-                sendResponse(exchange, 400, errorResponse);
-                return;
+        if(command==null ){
+//
+            if (path.contains("/restart")) command = "restart";
+            else if (path.contains("/shutdown")) command = "shutdown";
+            else if (path.contains("/clear")) {
+                command = "clear";
             }
+        }
+        if(command == null){
+            sendResponse(exchange, 400, "{\"error\": \"No command found\"}");
+            return;
         }
 
         switch (command){
@@ -129,6 +156,7 @@ public class ProductHandler implements HttpHandler {
                         throw new RuntimeException(e);
                     }
                 }).start();
+                return;
         }
 
         String idStr = getJsonValue(body, "id");
@@ -295,7 +323,8 @@ public class ProductHandler implements HttpHandler {
             return;
         }
         // if the json is an invalid json, some of the necessary parts are missing
-        if(getJsonValue(body, "name").equals("invalid-info")) {
+        String nameValue = getJsonValue(body, "name");
+        if (nameValue == null || nameValue.equals("invalid-info")) {
             sendResponse(exchange, 400, errorResponse);
             return;
         }
@@ -394,7 +423,7 @@ public class ProductHandler implements HttpHandler {
                 return;
             }
         }
-        DatabaseManager.saveProduct(product.getPid(),product.getName(),product.getDescription(),product.getPrice(),product.getQuantity());
+        DatabaseManager.updateProduct(product.getPid(),product.getName(),product.getDescription(),product.getPrice(),product.getQuantity());
         sendResponse(exchange, 200, product.toJson());
         return;
     }

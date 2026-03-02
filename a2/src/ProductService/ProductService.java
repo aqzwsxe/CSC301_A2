@@ -3,6 +3,7 @@ package ProductService;
 import Utils.DatabaseManager;
 import com.sun.net.httpserver.HttpServer;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.sql.SQLException;
@@ -35,7 +36,29 @@ public class ProductService {
         }
 
         String configPath = args[0];
-        DatabaseManager.initializeTables();
+        String dbConfig = (args.length > 1) ? args[1] : "dbConfig.json";
+        File dbFile = new File(dbConfig);
+        try {
+            if(dbFile.exists()){
+                DatabaseManager.setup(ConfigReader.getDbUrl(dbConfig)
+                );}
+            else {
+//                DatabaseManager.setup("jdbc:sqlite:service_data.db");
+                DatabaseManager.setup("jdbc:sqlite:301A2.db");
+                System.out.println("301A2.db  not found. Create 301A2.db.");
+            }
+        } catch (SQLException e) {
+            System.err.println("Failed to setup database connection: " + e.getMessage());
+            return;
+        }
+        try {
+            DatabaseManager.initializeTables();
+            System.out.println("System ready and database initialized");
+        }catch (SQLException e){
+            System.err.println("Failed to initialize tables: " + e.getMessage());
+            return;
+        }
+
         try{
             int port = ConfigReader.getPort(configPath, "ProductService");
             // new InetSocketAddress(port): combine the IP address and the port number
@@ -46,6 +69,10 @@ public class ProductService {
             // Whenever an Http request comes in with a path that starts with /product, hand
             // it over to the ProductHandler object to deal with it.
             server.createContext("/product", new ProductHandler());
+            // new features
+            server.createContext("/clear", new ProductHandler());
+            server.createContext("/restart", new ProductHandler());
+            server.createContext("/shutdown", new ProductHandler());
             // Determines how the ProductServer handle concurrent requests;
             // Executor: decide
             server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));

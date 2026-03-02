@@ -6,7 +6,7 @@ CONFIG="config.json"
 OUT_DIR="compiled"
 SRC_DIR="src"
 LIB_DIR="lib"
-JDBC_JAR="$LIB_DIR/postgresql-42.7.2.jar"
+JDBC_JAR="$LIB_DIR/sqlite-jdbc-3.51.2.0.jar"
 
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
     CP_SEP=";"
@@ -18,7 +18,6 @@ compile_service(){
 local service=$1
     echo "Compiling $service..."
     mkdir -p "$OUT_DIR"
-    javac -cp "$OUT_DIR" -d "$OUT_DIR" -sourcepath "$SRC_DIR" "$SRC_DIR/$service"/*.java
     # For the database
     javac -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" -d "$OUT_DIR" -sourcepath "$SRC_DIR" "$SRC_DIR/$service"/*.java
 }
@@ -37,8 +36,18 @@ case "$1" in
             compile_service "OrderService"
             compile_service "ProductService"
             compile_service "ISCS"
-            compile_service "Utils"
 
+            DB_FILE="301A2.db"
+            echo "Rebuilding SQLite Database"
+
+            if [ -f "$DB_FILE" ]; then
+                rm "$DB_FILE"
+                echo "Removed old $DB_FILE"
+            fi
+
+            touch "$DB_FILE"
+
+            echo "Database file $DB_FILE is ready."
             echo "Done."
             echo  "Press enter to close"
             read
@@ -74,6 +83,7 @@ case "$1" in
             # Check if the workload file was provided
             if [ -z "$2" ]; then
                 echo "Error: Please provide a workload file"
+
             else
                 echo "Starting Workload Parser with file: $2"
                 java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" Utils.WorkloadParser "$2"
