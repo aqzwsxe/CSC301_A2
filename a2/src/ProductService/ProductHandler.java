@@ -1,5 +1,6 @@
 package ProductService;
 
+import Utils.CacheManager;
 import Utils.DatabaseManager;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -16,6 +17,9 @@ import java.sql.SQLException;
  */
 public class ProductHandler implements HttpHandler {
     String errorResponse = "{}\n";
+
+    private static final CacheManager<Integer, String> productCache = new CacheManager<>();
+
 
     /**
      * Routes requests based on HTTP method.
@@ -51,6 +55,7 @@ public class ProductHandler implements HttpHandler {
         if(path.endsWith("/clear")){
             try {
                 DatabaseManager.clearAllData();
+                productCache.clear();
             } catch (SQLException e) {
                 System.err.println("Failed to clear database: " + e.getMessage());
             }
@@ -100,11 +105,20 @@ public class ProductHandler implements HttpHandler {
                 return;
             }
         }
+        String cacheProduct = productCache.get(id);
+        if (cacheProduct != null){
+            sendResponse(exchange, 200, cacheProduct);
+            return;
+        }
+
+
         // get the product from the real database
         Product product = DatabaseManager.getProductById(id);
 
         if(product != null){
-            sendResponse(exchange, 200, product.toJson());
+            String jsonResponse = product.toJson();
+            sendResponse(exchange, 200, jsonResponse);
+            productCache.put(id, jsonResponse);
         }
         else{
             sendResponse(exchange,404, errorResponse);
@@ -424,6 +438,7 @@ public class ProductHandler implements HttpHandler {
             }
         }
         DatabaseManager.updateProduct(product.getPid(),product.getName(),product.getDescription(),product.getPrice(),product.getQuantity());
+        productCache.invalidate(id);
         sendResponse(exchange, 200, product.toJson());
         return;
     }
@@ -475,6 +490,7 @@ public class ProductHandler implements HttpHandler {
                 if (product.getName().equals(name)  && product.getPrice() == price &&
                         product.getQuantity() == quantity) { // && product.getDescription().equals(description)
                         DatabaseManager.deleteProduct(id, name,price,quantity);
+                        productCache.invalidate(id);
                     sendResponse(exchange, 200, "{}\n");
                 } else {
                     sendResponse(exchange,404, errorResponse);

@@ -75,7 +75,7 @@ public class ProductService {
             server.createContext("/shutdown", new ProductHandler());
             // Determines how the ProductServer handle concurrent requests;
             // Executor: decide
-            server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(10));
+            server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
             server.start();
             System.out.println("ProductService is listening on port " + port);
         } catch (IOException e){

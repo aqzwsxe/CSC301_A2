@@ -66,7 +66,7 @@ public class OrderService {
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/", new OrderHandler(configFile));
-        server.setExecutor(Executors.newFixedThreadPool(10));
+        server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         System.out.println("Order Service started on port " + port);
         server.start();
     }

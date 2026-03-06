@@ -3,6 +3,8 @@ package Utils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Utility class for parsing a network configuration file
@@ -11,6 +13,57 @@ import java.nio.file.Paths;
  *
  */
 public class ConfigReader {
+
+
+    public static List<String> getServicePool(String configFile, String serviceName) throws IOException {
+        String content = Files.readString(Paths.get(configFile));
+        List<String> pool = new ArrayList<>();
+        int serviceIndex = content.indexOf("\"" + serviceName + "\"");
+        if (serviceIndex == -1) {
+            throw new RuntimeException("Service " + serviceName + " not found in config.");
+        }
+
+        int arrayStart = content.indexOf("[", serviceIndex);
+        int arrayEnd = content.indexOf("]", arrayStart);
+        if (arrayStart == -1 || arrayEnd == -1) {
+            throw new RuntimeException("Malformed config: Service pool must be an array [].");
+        }
+
+        String arrayContent = content.substring(arrayStart + 1, arrayEnd);
+
+        int searchIdx = 0;
+        while ((searchIdx = arrayContent.indexOf("{", searchIdx)) != -1) {
+            int blockEnd = arrayContent.indexOf("}", searchIdx);
+            if (blockEnd == -1) break;
+
+            String instanceBlock = arrayContent.substring(searchIdx, blockEnd);
+            String ip = extractStringValue(instanceBlock, "ip");
+            int port = extractIntValue(instanceBlock, "port");
+            pool.add("http://" + ip + ":" + port);
+            searchIdx = blockEnd + 1;
+        }
+        return pool;
+    }
+
+    private  static String extractStringValue(String blcok1, String key){
+        int keyIdx = blcok1.indexOf("\"" + key + "\"");
+        int colonIdx = blcok1.indexOf(":", keyIdx);
+        int firstQuote = blcok1.indexOf("\"", colonIdx);
+        int secondQuote = blcok1.indexOf("\"", firstQuote + 1);
+        return blcok1.substring(firstQuote + 1, secondQuote).trim();
+    }
+
+    private static int extractIntValue(String block1, String key) {
+        int keyIdx = block1.indexOf("\"" + key + "\"");
+        int colonIdx = block1.indexOf(":", keyIdx);
+        int endIdx = block1.indexOf(",", colonIdx);
+        if (endIdx == -1) endIdx = block1.length();
+
+        String val = block1.substring(colonIdx + 1, endIdx).replaceAll("[^0-9]", "").trim();
+        return Integer.parseInt(val);
+    }
+
+
     /**
      * Parses the specified configuration file to retrieve the port number for a given service.
      * @param configFile The path to the JSON configuration file
@@ -76,7 +129,7 @@ public class ConfigReader {
     }
 
     private static String getValue(String dbConfig, String section, String key) throws IOException {
-        String content = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(dbConfig)));
+        String content = Files.readString(Paths.get(dbConfig));
         int sectionIndex = content.indexOf("\"" + section + "\"");
         if (sectionIndex == -1) return null;
         int keyIndex = content.indexOf("\"" + key + "\"", sectionIndex);
@@ -86,9 +139,41 @@ public class ConfigReader {
         return content.substring(valueStart, valueEnd);
     }
 
-//    static void main() throws IOException {
-////        System.out.println(getPort("config.json", "UserService"));
-//        System.out.println(getIp("config.json", "UserService"));
-//    }
+    public static void main(String[] args) {
+        String testFile = "C:\\Users\\user\\Desktop\\All courses\\CSC301\\A2_component2\\CSC301_A2\\a2\\config.json"; // Ensure this file exists in your root directory
+
+        try {
+            System.out.println("=== Starting ConfigReader Test ===\n");
+
+            // 1. Test Service Pools (L7 Load Balancer support)
+            String[] services = {"UserService", "ProductService", "OrderService"};
+
+            for (String service : services) {
+                System.out.println("Testing Pool for: " + service);
+                List<String> pool = getServicePool(testFile, service);
+
+                if (pool.isEmpty()) {
+                    System.out.println("Warning: Pool is empty.");
+                } else {
+                    System.out.println("Found " + pool.size() + " instances:");
+                    for (String url : pool) {
+                        System.out.println("      -> " + url);
+                    }
+                }
+                System.out.println();
+            }
+
+            // 2. Test Single Value extraction (Legacy/Direct support)
+            System.out.println("Testing Single Port Extraction (ISCS):");
+            int iscsPort = getPort(testFile, "InterServiceCommunication");
+            System.out.println("ISCS Port: " + iscsPort);
+
+        } catch (IOException e) {
+            System.err.println("Error: Could not read " + testFile + ". Make sure the file exists.");
+        } catch (Exception e) {
+            System.err.println("Parsing Error: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
 }
 

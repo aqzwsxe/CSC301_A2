@@ -32,7 +32,8 @@ public class ISCS {
 
         // This line tells the server which path prefix should trigger handler
         server.createContext("/", new ISCSHandler(configFile));
-        server.setExecutor(Executors.newFixedThreadPool(10));
+        // Replace the original one by virtual Thread
+        server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         System.out.println("ISCS Service started on port "+ port);
         server.start();
     }

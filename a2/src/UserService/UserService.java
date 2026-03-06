@@ -72,7 +72,7 @@ public class UserService {
             // pass Executors.newFixedThreadPool(21) to it; it now maintains a pool of 21 dedicated worker threads
             // it now maintains a pool of 21 dedicated worker thread
             // Executor:
-            server.setExecutor(Executors.newFixedThreadPool(10));
+            server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
             server.start();
             System.out.println("UserService is listening on port " + port);
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {

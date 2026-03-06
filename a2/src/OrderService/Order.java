@@ -45,6 +45,7 @@ public class Order implements java.io.Serializable {
      * @param status the order status
      */
     public Order(int product_id, int user_id, int quantity, String status){
+        if (quantity <= 0) throw new IllegalArgumentException("Quantity must be positive");
         this.product_id = product_id;
         this.user_id = user_id;
         this.quantity = quantity;
@@ -60,6 +61,7 @@ public class Order implements java.io.Serializable {
      * @param status
      */
     public Order(int id, int product_id, int user_id, int quantity, String status){
+        if (quantity <= 0) throw new IllegalArgumentException("Quantity must be positive");
         this.id = id;
         this.product_id = product_id;
         this.user_id = user_id;
@@ -152,5 +154,10 @@ public class Order implements java.io.Serializable {
         }
         Order order = (Order) o;
         return id == order.id;
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(id);
     }
 }

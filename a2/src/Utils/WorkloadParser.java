@@ -117,6 +117,9 @@ public class WorkloadParser {
                 handleProduct(command,parts);
             }
         }
+        sc.close();
+        System.out.println("All commands dispatched. Waiting for final responses");
+        Thread.sleep(3000);
     }
 
 
@@ -253,9 +256,13 @@ public class WorkloadParser {
             String fullUrl = (orderUrl + endpoint).replaceAll("\\s", "");
             HttpRequest request = HttpRequest.newBuilder().uri(URI.create(fullUrl))
                     .DELETE().build();
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            System.out.println("DELETE " + endpoint + " | Status: " + response.statusCode());
-            System.out.println("Data: " + response.body());
+
+            client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenAccept(response -> {
+                        System.out.println("POST " + endpoint + " | Status: " + response.statusCode());
+                    });
+//            System.out.println("DELETE " + endpoint + " | Status: " + response.statusCode());
+//            System.out.println("Data: " + response.body());
         }catch (Exception e){
             System.out.println("Error when deleting an Order");
         }
@@ -392,12 +399,14 @@ public class WorkloadParser {
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
             System.out.println("After the HTTPRequest");
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            System.out.println("POST " + endpoint + " | Status: " + response.statusCode());
-            System.out.println("Data: " + response.body());
-//            if(response.statusCode() != 200){
-//                System.out.println("Response Body: " + response.body());
-//            }
+            client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenAccept(response -> {
+                        System.out.println("POST " + endpoint + " | Status: " + response.statusCode());
+                    })
+                    .exceptionally(e -> {
+                        System.err.println("Request failed: " + e.getMessage());
+                        return null;
+                    });
         } catch (Exception e) {
             System.out.println("Encounter an exception: " + e.getMessage());
         }

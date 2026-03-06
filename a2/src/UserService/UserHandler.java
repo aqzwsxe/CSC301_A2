@@ -1,5 +1,6 @@
 package UserService;
 
+import Utils.CacheManager;
 import Utils.DatabaseManager;
 import Utils.PersistenceManager;
 import com.sun.net.httpserver.HttpExchange;
@@ -21,6 +22,8 @@ import java.util.HashMap;
  */
 public class UserHandler implements HttpHandler {
 
+    private static final CacheManager<Integer, String> userCache = new CacheManager<>();
+
     /**
      * Routes requests based on HTTP method.
      *
@@ -35,6 +38,7 @@ public class UserHandler implements HttpHandler {
         String path = exchange.getRequestURI().getPath();
         System.out.println("[User] method: " + method);
         System.out.println("[User] path: " + path);
+        // There's no clear, shutdown and restart
         if (path.contains("/internal/") ||
                 path.equals("/clear") ||
                 path.equals("/restart") ||
@@ -59,6 +63,7 @@ public class UserHandler implements HttpHandler {
             try {
                 DatabaseManager.clearAllData();
                 User.id_counter.set(0);
+                userCache.clear();
                 sendResponse(exchange, 200, "{}");
             } catch (SQLException e) {
                 sendResponse(exchange, 500, "{}");
@@ -138,6 +143,14 @@ public class UserHandler implements HttpHandler {
             return;
         }
         try {
+            if(!path.contains("/user/purchased/")){
+                String cachedResponse = userCache.get(id);
+                if (cachedResponse!=null){
+                    sendResponse(exchange, 200, cachedResponse);
+                    return;
+                }
+            }
+
             User user = DatabaseManager.getUserById(id);
             if (user == null) {
                 sendResponse(exchange, 404, "{}");
@@ -162,6 +175,7 @@ public class UserHandler implements HttpHandler {
                     "        \"password\": \"%s\"\n" +
                     "    }", user.getId(), user.getUsername(), user.getEmail(), hashed_password);
 
+            userCache.put(user.getId(), res1);
             if(user!=null){
                 sendResponse(exchange, 200, res1);
                 return;
@@ -454,6 +468,7 @@ public class UserHandler implements HttpHandler {
         }
         String hashed_password = hash_helper(user.getPassword());
         DatabaseManager.updateUser(id, user.getUsername(), user.getEmail(), user.getPassword());
+        userCache.invalidate(id);
         String res1 = String.format("{\n" +
                 "        \"id\": %d,\n" +
                 "        \"username\": \"%s\",\n" +
@@ -505,6 +520,7 @@ public class UserHandler implements HttpHandler {
 
         if(match){
             DatabaseManager.deleteUser(id);
+            userCache.invalidate(id);
             sendResponse(exchange, 200, "{}");
             return;
         } else{

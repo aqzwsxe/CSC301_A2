@@ -1,5 +1,6 @@
 package OrderService;
 
+import Utils.CacheManager;
 import Utils.ConfigReader;
 import Utils.DatabaseManager;
 import Utils.PersistenceManager;
@@ -17,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Handles the given order request and generates an appropriate response.
@@ -33,7 +35,12 @@ public class OrderHandler implements HttpHandler {
      */
     private final HttpClient client;
 
-    private static boolean isFirstRequest = true;
+    private static final CacheManager<Integer, String> orderCache= new CacheManager<>();
+
+    /**
+     * For thread safety
+     */
+    private static AtomicBoolean isFirstRequest = new AtomicBoolean(true);
 
 
     /**
@@ -75,8 +82,7 @@ public class OrderHandler implements HttpHandler {
         System.out.println("method "+ method);
         System.out.println("The bodyString: "+ bodyString);
         try {
-            if (isFirstRequest){
-                isFirstRequest = false;
+            if (isFirstRequest.getAndSet(false)){
                 if (temp_path.equals("/restart")){
                     // Keep the database
                     System.out.println("OrderService: First is Restart. Persisting data.");
@@ -194,8 +200,17 @@ public class OrderHandler implements HttpHandler {
         }
         try {
             int orderId = Integer.parseInt(parts[2]);
+
+            String cached = orderCache.get(orderId);
+            if (cached != null){
+                sendResponse(exchange, 200, cached.getBytes());
+                return;
+            }
+
             Order order = DatabaseManager.getOrderById(orderId);
             if(order != null){
+                String json1 = order.toJson();
+                orderCache.put(orderId, json1);
                 sendResponse(exchange, 200, order.toJson().getBytes());
             }else{
                 sendError(exchange, 404, "{}");
@@ -249,6 +264,7 @@ public class OrderHandler implements HttpHandler {
 
                 boolean success = DatabaseManager.cancelOrder(orderId, order.getProduct_id(), restoredStock);
                 if(success){
+                    orderCache.invalidate(orderId);
                     sendResponse(exchange, 200, "{\"status\": \"Order cancelled and stock restored\"}".getBytes());
                     return;
                 }else {

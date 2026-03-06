@@ -10,6 +10,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * ISCSHandler implements the routing logic for the Inter-service Communication Service.
@@ -17,18 +20,19 @@ import java.net.http.HttpResponse;
  * microservice (user or product) based on the URL path
  */
 public class ISCSHandler implements HttpHandler {
-    /**
-     * The user service url
-     */
-    private final String userServiceUrl;
-    /**
-     * The product service url
-     */
-    private final String productServiceUrl;
+
+
     /**
      * The HTTP client used to forward intercepted requests to backend services.
      */
     private  final HttpClient client;
+
+
+    private final List<String> userServicePool;
+    private final List<String> productServicePool;
+    private final AtomicInteger userCounter= new AtomicInteger(0);
+    private final AtomicInteger productCounter = new AtomicInteger(0);
+
 
     /**
      * The constructor of ISCSHandler. It constructs an ISCSHandler by reading backend service information from a
@@ -37,19 +41,35 @@ public class ISCSHandler implements HttpHandler {
      * @throws IOException If the configuration file cannot be read or parsed
      */
     public ISCSHandler(String configFile) throws IOException {
-        String userIP = ConfigReader.getIp(configFile, "UserService").replace("\"", "").trim();
-        int userPort = ConfigReader.getPort(configFile,"UserService");
-        this.userServiceUrl = "http://"+userIP+":"+userPort;
+        this.userServicePool = ConfigReader.getServicePool(configFile, "UserService");
+        this.productServicePool = ConfigReader.getServicePool(configFile, "ProductService");
 
-        String productIp = ConfigReader.getIp(configFile, "ProductService").replace("\"", "").trim();
-        int productPort = ConfigReader.getPort(configFile, "ProductService");
-        this.productServiceUrl = "http://"+productIp + ":" + productPort;
-
-        // A thread-safe; Allows the client to manage a pool of connections and handle the threads
-        // When the service needs to talk to another service
-        this.client = HttpClient.newHttpClient();
+        this.client = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1) // Often more stable for local microservices
+                .executor(Executors.newVirtualThreadPerTaskExecutor()) // If using Java 21
+                .build();
 
 
+    }
+
+    private String getNextUserUrl(){
+        int index = Math.abs(userCounter.getAndIncrement() % userServicePool.size());
+        return userServicePool.get(index);
+    }
+
+    private void forwardSignal(String url) {
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(java.time.Duration.ofMillis(500)) // Don't let signals hang
+                    .GET()
+                    .build();
+            // Discarding body handler is best for signals to keep memory usage low
+            client.send(req, HttpResponse.BodyHandlers.discarding());
+        } catch (Exception e) {
+            // During shutdown/clear, some nodes might already be gone; just log and continue
+            System.err.println("[ISCS] Signal failed for: " + url);
+        }
     }
 
     /**
@@ -74,20 +94,20 @@ public class ISCSHandler implements HttpHandler {
         String path = exchange.getRequestURI().getPath();
         String targetBaseUrl;
         if(path.endsWith("/shutdown") || path.endsWith("/restart") || path.endsWith("/clear")){
-            System.out.println("Enter the check block");
+//            System.out.println("Enter the check block");
             handleInternalSignal(exchange,path);
             return;
         }
 
 
         if(path.startsWith("/user")){
-            targetBaseUrl = userServiceUrl;
+            targetBaseUrl = getNextUserUrl();
         }else if (path.startsWith("/product")){
-            targetBaseUrl = productServiceUrl;
+            targetBaseUrl = getNextProductUrl();
         } else if (path.contains("/user/internal/")) {
-            targetBaseUrl = userServiceUrl;
+            targetBaseUrl = getNextUserUrl();
         }else if (path.contains("/product/internal/")) {
-            targetBaseUrl = productServiceUrl;
+            targetBaseUrl = getNextProductUrl();
         } else {
                 sendResponse(exchange, 404, "Unknown Service Path".getBytes());
                 return;
@@ -114,6 +134,11 @@ public class ISCSHandler implements HttpHandler {
             sendResponse(exchange, 400, error);
             throw new RuntimeException(e);
         }
+    }
+
+    private String getNextProductUrl(){
+        int index = Math.abs(productCounter.getAndIncrement() % productServicePool.size());
+        return productServicePool.get(index);
     }
 
     /**
@@ -146,9 +171,15 @@ public class ISCSHandler implements HttpHandler {
         if (path.contains("shutdown")) command = "shutdown";
         else if (path.contains("restart")) command = "restart";
         else if (path.contains("clear")) command = "clear";
+
+        for (String url : userServicePool) {
+            forwardSignal(url + "/user/internal/" + command);
+        }
+        for (String url : productServicePool) {
+            forwardSignal(url + "/product/internal/" + command);
+        }
+
         System.out.println("[ISCS] Propagating " + command + " to all backends...");
-        forwardShutdown(userServiceUrl + "/user/internal/" + command);
-        forwardShutdown(productServiceUrl + "/product/internal/" + command);
         sendResponse(exchange, 200, ("{\"status\": \"" + command + " processed\"}").getBytes());
         if (command.equals("shutdown")) {
             System.out.println("Enter the if statement; Shutdown the ISCS");
@@ -163,12 +194,12 @@ public class ISCSHandler implements HttpHandler {
     }
 
 
-    private void forwardShutdown(String url){
-        try{
-            HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
-            client.send(req, HttpResponse.BodyHandlers.discarding());
-        }catch (Exception e){
-
-        }
-    }
+//    private void forwardShutdown(String url){
+//        try{
+//            HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
+//            client.send(req, HttpResponse.BodyHandlers.discarding());
+//        }catch (Exception e){
+//
+//        }
+//    }
 }

@@ -3,14 +3,24 @@ import OrderService.Order;
 import ProductService.Product;
 import UserService.User;
 
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executors;
 
 public class DatabaseManager {
     private static String dbUrl = "jdbc:sqlite:301A2.db?timeout=5000";
 //    private static DBConfig config = DBConfig.load1();
+    private static String dbServiceUrl = "http://142.1.114.76:9000/execute";
 
+    private static final HttpClient client = HttpClient.newBuilder()
+            .executor(Executors.newVirtualThreadPerTaskExecutor())
+            .build();
 
     private static Connection getConnection() throws SQLException{
         System.out.println("[DB] Connecting to: " + dbUrl);
@@ -18,6 +28,57 @@ public class DatabaseManager {
         try(Statement statement = connection.createStatement()) {
             statement.execute("PRAGMA foreign_keys = ON;");        }
         return connection;
+    }
+
+    private static String buildJson(String sql, Object... params) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+
+        sb.append("\"sql\": \"").append(sql.replace("\"", "\\\"")).append("\",");
+
+        sb.append("\"params\": [");
+        if (params != null) {
+            for (int i = 0; i < params.length; i++) {
+                Object p = params[i];
+
+                if (p == null) {
+                    sb.append("null");
+                } else if (p instanceof String) {
+                    sb.append("\"").append(p.toString().replace("\"", "\\\"")).append("\"");
+                } else if (p instanceof Boolean || p instanceof Number) {
+                    sb.append(p);
+                } else {
+                    sb.append("\"").append(p.toString().replace("\"", "\\\"")).append("\"");
+                }
+                if (i < params.length - 1) {
+                    sb.append(",");
+                }
+            }
+        }
+        sb.append("]");
+
+        sb.append("}");
+        return sb.toString();
+    }
+
+    private static String sendRemoteQuery(String sql, Object... params) {
+        String payload = buildJson(sql, params);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(dbServiceUrl))
+                .header("Content-Type", "application/json")
+                .version(HttpClient.Version.HTTP_2)
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
+                .build();
+
+        try {
+            return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenApply(HttpResponse::body)
+                    .get();
+        } catch (Exception e) {
+            System.err.println("[RemoteDB Error] " + e.getMessage());
+            return null;
+        }
     }
 //    public static void setUpTables() throws SQLException {
 //        String sqlUsers = "CREATE TABLE IF NOT EXISTS users (" +
@@ -64,17 +125,17 @@ public class DatabaseManager {
     }
 
 
-    public static void saveOrder(int prodId, int userId, int qty, String status) throws SQLException{
-        String sql = "INSERT INTO orders (product_id, user_id, quantity, status) VALUES (?, ?, ?, ?)";
-        try(Connection connection=getConnection();
-            PreparedStatement preparedStatement = connection.prepareStatement(sql);
-        ){
-            preparedStatement.setInt(1, prodId);
-            preparedStatement.setInt(2, userId);
-            preparedStatement.setInt(3, qty);
-            preparedStatement.setString(4, status);
-            preparedStatement.executeUpdate();
-        }
+    public static synchronized void saveOrder(int prodId, int userId, int qty, String status) throws SQLException{
+        // Synchronization signature: ensures that only one thread can execute that method for a specific instance of the class
+        String json = String.format("{\"sql\": \"INSERT...\", \"params\": [%d, %d]}", prodId, userId);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(dbServiceUrl))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        // Send the request over the network to the VM
+        client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
     }
 
 
@@ -104,7 +165,7 @@ public class DatabaseManager {
 
 
 
-    public static int saveUser(String name, String email) throws SQLException{
+    public static synchronized int  saveUser(String name, String email) throws SQLException{
         String sql = "INSERT INTO users (username, email, password) VALUES (?, ?, 'default')";
         try(Connection connection = getConnection();
             PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)
@@ -122,20 +183,12 @@ public class DatabaseManager {
         return -1;
     }
 
-    public static void saveProduct(int id, String name, String description, float price, int quantity){
+    public static synchronized boolean saveProduct(int id, String name, String description, float price, int quantity){
         String sql = "INSERT INTO products (id, name, description, price, quantity) VALUES (?, ?, ?, ?, ?)";
-        try(Connection connection = getConnection();
-            PreparedStatement preparedStatement = connection.prepareStatement(sql)
-        ){
-            preparedStatement.setInt(1,id);
-            preparedStatement.setString(2,name);
-            preparedStatement.setString(3,description);
-            preparedStatement.setFloat(4,price);
-            preparedStatement.setInt(5,quantity);
-            preparedStatement.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+
+        String response = sendRemoteQuery(sql, id, name, description, price, quantity);
+
+        return response != null && !response.contains("error");
     }
 
     public static Product  getProductById(int productId){
@@ -177,15 +230,7 @@ public class DatabaseManager {
     }
     public static void updateProductQuantity(int productId, int newQuantity){
         String sql = "UPDATE products SET quantity = ? WHERE id = ?";
-        try(Connection connection=getConnection();
-            PreparedStatement preparedStatement = connection.prepareStatement(sql)
-        ) {
-            preparedStatement.setInt(1,newQuantity);
-            preparedStatement.setInt(2,productId);
-            preparedStatement.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        sendRemoteQuery(sql, newQuantity, productId);
     }
 
     public static void updateProduct(int id, String name, String description, float price, int quantity){
@@ -240,46 +285,15 @@ public class DatabaseManager {
     }
 
 
-    public static boolean placeOrder(int prodId, int userId, int qty, int newStock){
-        String updateStockSql = "UPDATE products SET quantity = ? WHERE id = ?";
-        String insertOrderSql = "INSERT INTO orders (product_id, user_id, quantity, status) VALUES (?, ?, ?, 'Success')";
+    public static synchronized boolean placeOrder(int prodId, int userId, int qty, int newStock){
+        String sql = "BEGIN TRANSACTION; " +
+                "UPDATE products SET quantity = ? WHERE id = ?; " +
+                "INSERT INTO orders (product_id, user_id, quantity, status) VALUES (?, ?, ?, 'Success'); " +
+                "COMMIT;";
 
+        String response = sendRemoteQuery(sql, newStock, prodId, prodId, userId, qty);
 
-
-        try(Connection conn = getConnection()) {
-            conn.setAutoCommit(false);
-
-            try(PreparedStatement updateStmt = conn.prepareStatement(updateStockSql);
-            PreparedStatement insertStmt = conn.prepareStatement(insertOrderSql)
-            ) {
-                updateStmt.setInt(1, newStock);
-                updateStmt.setInt(2, prodId);
-                updateStmt.executeUpdate();
-
-                insertStmt.setInt(1,prodId);
-                insertStmt.setInt(2, userId);
-                insertStmt.setInt(3, qty);
-                insertStmt.executeUpdate();
-                conn.commit();
-                return  true;
-            }
-            catch (SQLException e){
-                try {
-                    // 1. Log the specific database error for debugging
-                    System.err.println("Transaction failed, rolling back. Reason: " + e.getMessage());
-
-                    // 2. Perform the rollback
-                    conn.rollback();
-                } catch (SQLException rollbackEx) {
-                    // 3. Handle cases where the rollback itself fails
-                    System.err.println("Rollback failed: " + rollbackEx.getMessage());
-                }
-                return false;
-            }
-
-        } catch (SQLException e) {
-            return false;
-        }
+        return response != null && !response.contains("error");
     }
 
     public static boolean cancelOrder(int orderId, int prodId, int restoredStock)  {
@@ -344,36 +358,84 @@ public class DatabaseManager {
     }
 
     public static User getUserById(int id) throws SQLException {
-        String sql = "SELECT * FROM users WHERE id = ?";
-        try(Connection conn = getConnection();
-            PreparedStatement preparedStatement = conn.prepareStatement(sql)
+        String response = sendRemoteQuery("SELECT * FROM users WHERE id = ?", id);
+        if (response == null || response.contains("null")) return null;
 
-        ) {
-            preparedStatement.setInt(1, id);
-            try (ResultSet rs = preparedStatement.executeQuery()){
-                if(rs.next()){
-                    return new User(rs.getInt("id"),
-                            rs.getString("username"),
-                            rs.getString("email"),
-                            rs.getString("password")
-                    );
-                }
-            }
+        // Parse the JSON string from the VM back into a User object
+        // (Assuming your VM returns something like {"id": 1, "username": "...", ...})
+        return parseUserFromJson(response);
+    }
+
+    public static User parseUserFromJson(String json) {
+        String id = getJsonValue(json, "id");
+        String username = getJsonValue(json, "username");
+        String email = getJsonValue(json, "email");
+        String password = getJsonValue(json, "password");
+
+        if (id == null) return null;
+        return new User(Integer.parseInt(id), username, email, password);
+    }
+
+    public static Product parseProductFromJson(String json) {
+        String id = getJsonValue(json, "id");
+        String name = getJsonValue(json, "name");
+        String desc = getJsonValue(json, "description");
+        String price = getJsonValue(json, "price");
+        String qty = getJsonValue(json, "quantity");
+
+        if (id == null) return null;
+        return new Product(Integer.parseInt(id), name, desc, Float.parseFloat(price), Integer.parseInt(qty));
+    }
+
+    /**
+     * Extracts the value for a specific key from a JSON string.
+     * Supports both String values (removes quotes) and Numeric values.
+     */
+    private static String getJsonValue(String json, String key) {
+        if (json == null || key == null) return null;
+
+        String keyPattern = "\"" + key + "\"";
+        int keyIndex = json.indexOf(keyPattern);
+        if (keyIndex == -1) return null;
+
+        int colonIndex = json.indexOf(":", keyIndex + keyPattern.length());
+        if (colonIndex == -1) return null;
+
+        int valueStart = colonIndex + 1;
+        int nextComma = json.indexOf(",", valueStart);
+        int nextBrace = json.indexOf("}", valueStart);
+
+        int end;
+        if (nextComma != -1 && nextBrace != -1) {
+            end = Math.min(nextComma, nextBrace);
+        } else {
+            end = (nextComma != -1) ? nextComma : nextBrace;
         }
-        return null;
+
+        if (end == -1) return null;
+
+        String value = json.substring(valueStart, end).trim();
+
+        if (value.startsWith("\"") && value.endsWith("\"")) {
+            value = value.substring(1, value.length() - 1);
+        }
+
+        return value;
     }
 
 
+
     public static void initializeTables() throws SQLException {
+        //Enable WAL model for multiple threads to read simultaneously
         String userTable = "CREATE TABLE IF NOT EXISTS users (" +
-                "id INTEGER PRIMARY KEY, " +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
                 "username TEXT NOT NULL, " +
                 "email TEXT NOT NULL, " +
                 "password TEXT NOT NULL" +
                 ");";
 
         String productTable = "CREATE TABLE IF NOT EXISTS products (" +
-                "id INTEGER PRIMARY KEY, " +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
                 "name TEXT NOT NULL, " +
                 "description TEXT, " +
                 "price REAL NOT NULL, " + // FLOAT -> REAL
@@ -393,6 +455,7 @@ public class DatabaseManager {
              Statement statement = conn.createStatement()
         ){
             statement.execute("PRAGMA foreign_keys = ON;");
+            statement.execute("PRAGMA journal_mode=WAL;");
             statement.execute(userTable);
             statement.execute(productTable);
             statement.execute(orderTable);
@@ -407,7 +470,7 @@ public class DatabaseManager {
     }
 
 
-    public static void saveUserFull(int id, String username, String email, String password){
+    public static synchronized int saveUserFull(int id, String username, String email, String password){
         String sql = "INSERT INTO users (id, username, email, password) VALUES (?, ?, ?, ?)";
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -416,6 +479,14 @@ public class DatabaseManager {
             pstmt.setString(3, email);
             pstmt.setString(4, password);
             pstmt.executeUpdate();
+
+            try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    return generatedKeys.getInt(1);
+                } else {
+                    throw new SQLException("Creating user failed, no ID obtained.");
+                }
+            }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
