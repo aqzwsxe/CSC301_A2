@@ -30,6 +30,23 @@ public class DatabaseManager {
         return connection;
     }
 
+    public static boolean isDatabaseHealthy(){
+        System.out.println("[HealthCheck] Verifying connection to VM");
+        String sql = "SELECT 1;";
+        try {
+            String response = sendRemoteQuery(sql);
+            if(response != null && response.contains("1") && !response.contains("error")){
+                System.out.println("[HealthCheck] PASSED: VM and Database are responsive.");
+                return true;
+            }else {
+                System.out.println("[HealthCheck] FAILED: Received unexpected response: " + response);
+            }
+        }catch (Exception e){
+            System.err.println("[HealthCheck] Failed: Could not reach VM: " + e.getMessage());
+        }
+        return false;
+    }
+
     private static String buildJson(String sql, Object... params) {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
@@ -395,5 +412,11 @@ public class DatabaseManager {
         sendRemoteQuery(sql, id);
     }
 
-
+    static void main() {
+        // 1. Check connectivity before starting the server
+        if (!DatabaseManager.isDatabaseHealthy()) {
+            System.err.println("Critical Error: Database Service is offline. Exiting...");
+            System.exit(1);
+        }
+    }
 }
