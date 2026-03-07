@@ -108,25 +108,15 @@ public class DatabaseManager {
     }
 
     public static void clearAllData() throws SQLException{
-        try(Connection connection=getConnection();
-            Statement stat = connection.createStatement();
-        ) {
-            stat.executeUpdate("DELETE FROM orders;");
-            stat.executeUpdate("DELETE FROM products;");
-            stat.executeUpdate("DELETE FROM users;");
-
-            try {
-                stat.executeUpdate("DELETE FROM sqlite_sequence WHERE name IN ('orders', 'products', 'users');");
-            }catch (SQLException e){
-
-            }
-
-        }
+        String sql = "BEGIN TRANSACTION; " +
+                "DELETE FROM orders; DELETE FROM products; DELETE FROM users; " +
+                "DELETE FROM sqlite_sequence WHERE name IN ('orders', 'products', 'users'); " +
+                "COMMIT;";
+        sendRemoteQuery(sql);
     }
 
 
-    public static synchronized void saveOrder(int prodId, int userId, int qty, String status) throws SQLException{
-        // Synchronization signature: ensures that only one thread can execute that method for a specific instance of the class
+    public static void saveOrder(int prodId, int userId, int qty, String status) throws SQLException{
         String json = String.format("{\"sql\": \"INSERT...\", \"params\": [%d, %d]}", prodId, userId);
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(dbServiceUrl))
@@ -134,56 +124,58 @@ public class DatabaseManager {
                 .POST(HttpRequest.BodyPublishers.ofString(json))
                 .build();
 
-        // Send the request over the network to the VM
         client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
     }
 
 
 
     public static Order getOrderById(int orderId){
-        String sql = "SELECT * FROM orders WHERE id = ?";
-        try(Connection conn = getConnection();
-            PreparedStatement preparedStatement = conn.prepareStatement(sql);
-        ) {
-            preparedStatement.setInt(1, orderId);
-            try (ResultSet rs = preparedStatement.executeQuery()) {
-                if(rs.next()){
-                    Order order = new Order(rs.getInt("product_id"),
-                                        rs.getInt("user_id"),
-                                        rs.getInt("quantity"),
-                                        rs.getString("status")
-                            );
-                    order.setId(rs.getInt("id"));
-                    return order;
-                }
+        String response = sendRemoteQuery("SELECT * FROM orders WHERE id = ?", orderId);
+        return parseOrderFromJson(response);
+    }
+
+    public static Order parseOrderFromJson(String json){
+        if(json == null || json.trim().isEmpty() || json.equals("{}") || json.equalsIgnoreCase("null"))
+        {
+            return null;
+        }
+        try {
+            String idStr = getJsonValue(json, "id");
+            String prodIdStr = getJsonValue(json, "product_id");
+            String userIdStr = getJsonValue(json, "user_id");
+            String qtyStr = getJsonValue(json, "quantity");
+            String status = getJsonValue(json, "status");
+
+            if(prodIdStr == null || userIdStr == null){
+                return null;
             }
-        } catch (SQLException e) {
-            System.err.println("Error fetching order " + orderId + ": " + e.getMessage());
+            Order order = new Order(
+                    Integer.parseInt(prodIdStr),
+                    Integer.parseInt(userIdStr),
+                    Integer.parseInt(qtyStr),
+                    status
+            );
+
+            if(idStr != null){
+                order.setId(Integer.parseInt(idStr));
+                return order;
+            }
+        }catch (Exception e){
+            System.err.println("[DatabaseManager] Order Parsing error: " + e.getMessage());
+            return null;
         }
         return null;
     }
 
 
 
-    public static synchronized int  saveUser(String name, String email) throws SQLException{
+    public static  int  saveUser(String name, String email) throws SQLException{
         String sql = "INSERT INTO users (username, email, password) VALUES (?, ?, 'default')";
-        try(Connection connection = getConnection();
-            PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)
-        ){
-            preparedStatement.setString(1,name);
-            preparedStatement.setString(2,email);
-            preparedStatement.executeUpdate();
-
-            try(ResultSet rs = preparedStatement.getGeneratedKeys()){
-                if(rs.next()){
-                    return rs.getInt(1);
-                }
-            }
-        }
-        return -1;
+        String response = sendRemoteQuery(sql, name, email);
+        return (response != null && !response.contains("error")) ? 1 : -1;
     }
 
-    public static synchronized boolean saveProduct(int id, String name, String description, float price, int quantity){
+    public static  boolean saveProduct(int id, String name, String description, float price, int quantity){
         String sql = "INSERT INTO products (id, name, description, price, quantity) VALUES (?, ?, ?, ?, ?)";
 
         String response = sendRemoteQuery(sql, id, name, description, price, quantity);
@@ -192,41 +184,14 @@ public class DatabaseManager {
     }
 
     public static Product  getProductById(int productId){
-        String sql = "SELECT * FROM products WHERE id = ?";
-        try(Connection connection = getConnection();
-            PreparedStatement preparedStatement = connection.prepareStatement(sql)
-        ) {
-            preparedStatement.setInt(1,productId);
-            try(ResultSet rs = preparedStatement.executeQuery()) {
-                if(rs.next()){
-                    return new Product(
-                            rs.getInt("id"),
-                            rs.getString("name"),
-                            rs.getString("description"),
-                            rs.getFloat("price"),
-                            rs.getInt("quantity")
-                    );
-                }
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        return null;
+        String response = sendRemoteQuery("SELECT * FROM products WHERE id = ?", productId);
+        if (response == null || response.contains("null") || response.equals("[]")) return null;
+        return parseProductFromJson(response);
     }
 
     public  static void deleteProduct(int id, String name, float price, int quantity){
         String sql = "DELETE FROM products WHERE id = ? AND name = ? AND price = ? AND quantity = ?";
-        try(Connection connection = getConnection();
-            PreparedStatement preparedStatement = connection.prepareStatement(sql)
-        ) {
-            preparedStatement.setInt(1,id);
-            preparedStatement.setString(2, name);
-            preparedStatement.setFloat(3, price);
-            preparedStatement.setInt(4, quantity);
-            preparedStatement.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        sendRemoteQuery(sql, id, name, price, quantity);
     }
     public static void updateProductQuantity(int productId, int newQuantity){
         String sql = "UPDATE products SET quantity = ? WHERE id = ?";
@@ -235,31 +200,12 @@ public class DatabaseManager {
 
     public static void updateProduct(int id, String name, String description, float price, int quantity){
         String sql = "UPDATE products SET name = ?, description = ?, price = ?, quantity = ? WHERE id = ?";
-        try(Connection connection = getConnection();
-            PreparedStatement preparedStatement = connection.prepareStatement(sql)
-        ) {
-           preparedStatement.setString(1, name);
-           preparedStatement.setString(2, description);
-           preparedStatement.setFloat(3, price);
-           preparedStatement.setInt(4, quantity);
-           preparedStatement.setInt(5, id);
-           preparedStatement.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        sendRemoteQuery(sql, name, description, price, quantity, id);
     }
 
     public static void updateOrderStatus(int orderId, String status){
         String sql = "UPDATE orders SET status = ? WHERE id = ?";
-        try(Connection conn = getConnection();
-            PreparedStatement preparedStatement = conn.prepareStatement(sql);
-        ) {
-            preparedStatement.setString(1, status);
-            preparedStatement.setInt(2, orderId);
-            preparedStatement.executeUpdate();
-        } catch (SQLException e) {
-            System.err.println("Error updating order status: " + e.getMessage());
-        }
+        sendRemoteQuery(sql, status, orderId);
     }
 
 
@@ -269,23 +215,35 @@ public class DatabaseManager {
                 "FROM orders " +
                 "WHERE user_id = ? AND status = 'Success' " +
                 "GROUP BY product_id";
-        try(Connection connection = getConnection();
-            PreparedStatement preparedStatement = connection.prepareStatement(sql)
-        ){
-            preparedStatement.setInt(1,userId);
-            try (ResultSet rs = preparedStatement.executeQuery();) {
-                while (rs.next()){
-                    purchases.put(rs.getInt("product_id"),rs.getInt("total_qty"));
+        String response = sendRemoteQuery(sql, userId);
+        if (response == null || response.length() < 5 || response.equals("[]")) {
+            return purchases;
+        }
+        try {
+            String content = response.trim();
+            if (content.startsWith("[")) content = content.substring(1);
+            if (content.endsWith("]")) content = content.substring(0, content.length() - 1);
+
+            String[] items = content.split("\\},");
+            for (String item : items) {
+                String cleanItem = item.trim();
+                if (!cleanItem.endsWith("}")) cleanItem += "}"; // Ensure it's a valid JSON fragment
+
+                String prodId = getJsonValue(cleanItem, "product_id");
+                String totalQty = getJsonValue(cleanItem, "total_qty");
+
+                if (prodId != null && totalQty != null) {
+                    purchases.put(Integer.parseInt(prodId), Integer.parseInt(totalQty));
                 }
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        } catch (Exception e) {
+            System.err.println("[DatabaseManager] Error parsing purchases: " + e.getMessage());
         }
         return purchases;
     }
 
 
-    public static synchronized boolean placeOrder(int prodId, int userId, int qty, int newStock){
+    public static boolean placeOrder(int prodId, int userId, int qty, int newStock){
         String sql = "BEGIN TRANSACTION; " +
                 "UPDATE products SET quantity = ? WHERE id = ?; " +
                 "INSERT INTO orders (product_id, user_id, quantity, status) VALUES (?, ?, ?, 'Success'); " +
@@ -297,72 +255,24 @@ public class DatabaseManager {
     }
 
     public static boolean cancelOrder(int orderId, int prodId, int restoredStock)  {
-        String updateStockSql = "UPDATE products SET quantity = ? WHERE id = ?";
-        String updateOrderSql = "UPDATE orders SET status = 'Cancelled' WHERE id = ?";
-
-
-        try(Connection conn = getConnection();) {
-              conn.setAutoCommit(false);
-
-              try(PreparedStatement ps1 = conn.prepareStatement(updateStockSql);
-                  PreparedStatement ps2 = conn.prepareStatement(updateOrderSql)
-              ) {
-                  ps1.setInt(1, restoredStock);
-                  ps1.setInt(2, prodId);
-                  ps1.executeUpdate();
-
-                  ps2.setInt(1, orderId);
-                  ps2.executeUpdate();
-                  conn.commit();
-                  return true;
-              }catch (SQLException e){
-                  try {
-                      // 1. Log the specific database error for debugging
-                      System.err.println("Transaction failed, rolling back. Reason: " + e.getMessage());
-
-                      // 2. Perform the rollback
-                      conn.rollback();
-                  } catch (SQLException rollbackEx) {
-                      // 3. Handle cases where the rollback itself fails
-                      System.err.println("Rollback failed: " + rollbackEx.getMessage());
-                  }
-                  return false;
-              }
-
-
-
-        }catch (SQLException e){
-
-                return false;
-
-        }
-
+        String sql = "BEGIN TRANSACTION; " +
+                "UPDATE products SET quantity = ? WHERE id = ?; " +
+                "UPDATE orders SET status = 'Cancelled' WHERE id = ?; " +
+                "COMMIT;";
+        String response = sendRemoteQuery(sql, restoredStock, prodId, orderId);
+        return response != null && !response.contains("error");
     }
 
 
     public static String getUserNameById(int userId){
-        String sql = "SELECT username FROM users WHERE id = ?";
-        try(Connection connection = getConnection();
-            PreparedStatement preparedStatement = connection.prepareStatement(sql)
-        ) {
-            preparedStatement.setInt(1,userId);
-            try(ResultSet rs = preparedStatement.executeQuery()) {
-                if(rs.next()){
-                    return  rs.getString("username");
-                }
-            }
-        }catch (SQLException e){
-            System.err.println("Error fetching user: " + e.getMessage());
-        }
-        return null;
+        String response = sendRemoteQuery("SELECT username FROM users WHERE id = ?", userId);
+        return getJsonValue(response, "username");
     }
 
     public static User getUserById(int id) throws SQLException {
         String response = sendRemoteQuery("SELECT * FROM users WHERE id = ?", id);
         if (response == null || response.contains("null")) return null;
 
-        // Parse the JSON string from the VM back into a User object
-        // (Assuming your VM returns something like {"id": 1, "username": "...", ...})
         return parseUserFromJson(response);
     }
 
@@ -470,47 +380,19 @@ public class DatabaseManager {
     }
 
 
-    public static synchronized int saveUserFull(int id, String username, String email, String password){
+    public static void saveUserFull(int id, String username, String email, String password){
         String sql = "INSERT INTO users (id, username, email, password) VALUES (?, ?, ?, ?)";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, id);
-            pstmt.setString(2, username);
-            pstmt.setString(3, email);
-            pstmt.setString(4, password);
-            pstmt.executeUpdate();
-
-            try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
-                if (generatedKeys.next()) {
-                    return generatedKeys.getInt(1);
-                } else {
-                    throw new SQLException("Creating user failed, no ID obtained.");
-                }
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        sendRemoteQuery(sql, id, username, email, password);
     }
 
     public static void updateUser(int id, String username, String email, String password) throws SQLException {
         String sql = "UPDATE users SET username = ?, email = ?, password = ? WHERE id = ?";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, username);
-            pstmt.setString(2, email);
-            pstmt.setString(3, password);
-            pstmt.setInt(4, id);
-            pstmt.executeUpdate();
-        }
+        sendRemoteQuery(sql, username, email, password, id);
     }
 
     public static void deleteUser(int id) throws SQLException {
         String sql = "DELETE FROM users WHERE id = ?";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, id);
-            pstmt.executeUpdate();
-        }
+        sendRemoteQuery(sql, id);
     }
 
 
