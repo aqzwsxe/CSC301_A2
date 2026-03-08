@@ -8,85 +8,80 @@ SRC_DIR="src"
 LIB_DIR="lib"
 JDBC_JAR="$LIB_DIR/sqlite-jdbc-3.51.2.0.jar"
 
+# Set Classpath Separator
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
     CP_SEP=";"
 else
     CP_SEP=":"
 fi
-# Function to compile a service
+
+# Define the Classpath (Includes compiled classes and Maven dependencies)
+FULL_CP="$OUT_DIR${CP_SEP}$JDBC_JAR${CP_SEP}target/dependency/*${CP_SEP}."
+
 compile_service(){
-local service=$1
+    local service=$1
     echo "Compiling $service..."
     mkdir -p "$OUT_DIR"
-    # For the database
-    javac -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" -d "$OUT_DIR" -sourcepath "$SRC_DIR" "$SRC_DIR/$service"/*.java
+    # Compile with access to all dependencies in target/dependency
+    javac -cp "$FULL_CP" -d "$OUT_DIR" -sourcepath "$SRC_DIR" "$SRC_DIR/$service"/*.java
 }
 
 case "$1" in
-    -c)
-            echo "Cleaning and Compiling all services..."
+      -c)
+            echo "--- Starting Build Process ---"
+
+            # 1. Clean up
             rm -rf "$OUT_DIR"
             mkdir -p "$OUT_DIR"
 
-            # 1. Compile Utils first so others can find ConfigReader
-            compile_service "Utils"
+            # 2. Extract dependencies from Maven
+            echo "Fetching dependencies via Maven..."
+            mvn dependency:copy-dependencies -DoutputDirectory=target/dependency -q
 
-            # 2. Compile UserService (now it can find Utils in the $OUT_DIR)
+            # 3. Compile in order
+            compile_service "Utils"
             compile_service "UserService"
             compile_service "OrderService"
             compile_service "ProductService"
             compile_service "ISCS"
 
-            DB_FILE="301A2.db"
-            echo "Rebuilding SQLite Database"
-
-            if [ -f "$DB_FILE" ]; then
-                rm "$DB_FILE"
-                echo "Removed old $DB_FILE"
-            fi
-
-            touch "$DB_FILE"
-
-            echo "Database file $DB_FILE is ready."
-            echo "Done."
-            echo  "Press enter to close"
-            read
+            echo "--- Compilation Complete ---"
+            echo "Remote DB on VM (142.1.114.76) will be used at runtime."
             ;;
 
-    -u)
-            echo "Starting User Service"
-            java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" UserService.UserService "$CONFIG"
-            echo  "Press enter to close"
-            read
-            ;;
-
-    -p)
-            echo "Starting Product Service"
-            java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" ProductService.ProductService "$CONFIG"
-            echo  "Press enter to close"
-            read
-            ;;
-    -i)
-            echo "Starting Inter-Service Communication Service (ISCS)"
-            java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" ISCS.ISCS "$CONFIG"
-            echo  "Press enter to close"
-            read
-            ;;
-    -o)
-            echo "Starting Order Service"
-            java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" OrderService.OrderService "$CONFIG"
-            echo  "Press enter to close"
-            read
-            ;;
+#    -u)
+#            echo "Starting User Service"
+#            java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" UserService.UserService "$CONFIG"
+#            echo  "Press enter to close"
+#            read
+#            ;;
+#
+#    -p)
+#            echo "Starting Product Service"
+#            java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" ProductService.ProductService "$CONFIG"
+#            echo  "Press enter to close"
+#            read
+#            ;;
+#    -i)
+#            echo "Starting Inter-Service Communication Service (ISCS)"
+#            java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" ISCS.ISCS "$CONFIG"
+#            echo  "Press enter to close"
+#            read
+#            ;;
+#    -o)
+#            echo "Starting Order Service"
+#            java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" OrderService.OrderService "$CONFIG"
+#            echo  "Press enter to close"
+#            read
+#            ;;
 
     -w)
             # Check if the workload file was provided
             if [ -z "$2" ]; then
                 echo "Error: Please provide a workload file"
-
             else
                 echo "Starting Workload Parser with file: $2"
-                java -cp "$OUT_DIR${CP_SEP}$JDBC_JAR" Utils.WorkloadParser "$2"
+                java -cp "$FULL_CP" Utils.WorkloadParser "$2"
             fi
             ;;
     *)
