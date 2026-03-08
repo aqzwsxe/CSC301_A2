@@ -44,8 +44,9 @@ public class ProductService {
                 );}
             else {
 //                DatabaseManager.setup("jdbc:sqlite:service_data.db");
-                DatabaseManager.setup("jdbc:sqlite:301A2.db");
-                System.out.println("301A2.db  not found. Create 301A2.db.");
+                String fallbackUrl = "jdbc:postgresql://142.1.114.76:5432/mydb";
+                DatabaseManager.setup(fallbackUrl);
+                System.out.println("dbConfig not found. Defaulting to Remote PostgreSQL Instance at " + fallbackUrl);
             }
         } catch (SQLException e) {
             System.err.println("Failed to setup database connection: " + e.getMessage());
@@ -66,7 +67,8 @@ public class ProductService {
             int port = ConfigReader.getPort(configPath, "ProductService", instanceIdx);
             // new InetSocketAddress(port): combine the IP address and the port number
             // Don't really need to specify the ip address
-            HttpServer server = HttpServer.create(new InetSocketAddress(port),0);
+            int backlog = 1024;
+            HttpServer server = HttpServer.create(new InetSocketAddress(port), backlog);
             // Handle everything start with /product.
             // routing logic of the microservice. Acts as a filter;
             // Whenever an Http request comes in with a path that starts with /product, hand

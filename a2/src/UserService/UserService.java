@@ -61,7 +61,8 @@ public class UserService {
             int port = ConfigReader.getPort(configPath, "UserService", instanceIdx);
             // new InetSocketAddress(port): combine the IP address and the port number
             // Don't really need to specify the ip address
-            HttpServer server = HttpServer.create(new InetSocketAddress(port),0);
+            int backlog = 1024;
+            HttpServer server = HttpServer.create(new InetSocketAddress(port), backlog);
             // Handle everything start with /user.
             // routing logic of the microservice. Acts as a filter;
             // Whenever an Http request comes in with a path that starts with /user, hand

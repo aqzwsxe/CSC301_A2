@@ -83,8 +83,8 @@ public class OrderService {
             url = ConfigReader.getDbUrl(dbConfig);
             System.out.println("Using DB URL from config: " + url);
         }else {
-            url = "http://142.1.114.76:9000/execute";
-            System.out.println("dbConfig not found. Defaulting to Remote VM Proxy");
+            url = "jdbc:postgresql://142.1.114.76:5432/mydb";
+            System.out.println("dbConfig not found. Defaulting to Remote PostgreSQL Instance");
         }
         DatabaseManager.setup(url);
         if(! DatabaseManager.isDatabaseHealthy()){

@@ -221,24 +221,18 @@ public class DatabaseManager {
     }
 
 
-    public static Map<Integer, Integer> getUserPurchases(int userId){
+    public static Map<Integer, Integer> getUserPurchases(int userId) throws SQLException {
         Map<Integer, Integer> purchases = new HashMap<>();
-        // PostgreSQL handles aggregation much faster than manual JSON parsing
-        String sql = "SELECT product_id, SUM(quantity) as total_qty " +
-                "FROM orders " +
-                "WHERE user_id = ? AND status = 'Success' " +
-                "GROUP BY product_id";
+        String sql = "SELECT product_id, quantity FROM user_purchases WHERE user_id = ?";
 
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, userId);
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
-                    purchases.put(rs.getInt("product_id"), rs.getInt("total_qty"));
+                    purchases.put(rs.getInt("product_id"), rs.getInt("quantity"));
                 }
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
         return purchases;
     }
@@ -376,12 +370,20 @@ public class DatabaseManager {
                 "quantity INTEGER NOT NULL, " +
                 "status VARCHAR(50) NOT NULL);";
 
+        String user_purchases = "CREATE TABLE IF NOT EXISTS user_purchases (\n" +
+                "    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,\n" +
+                "    product_id INTEGER,\n" +
+                "    quantity INTEGER,\n" +
+                "    PRIMARY KEY (user_id, product_id)\n" +
+                ");";
+
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
 
             stmt.execute(userTable);
             stmt.execute(productTable);
             stmt.execute(orderTable);
+            stmt.execute(user_purchases);
 
             // PostgreSQL handles INDEX IF NOT EXISTS similarly
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);");
@@ -454,6 +456,21 @@ public class DatabaseManager {
             // Foreign Key Violation error here.
             System.err.println("[DB Error] Error deleting user: " + e.getMessage());
             throw e;
+        }
+    }
+
+    public static void recordPurchase(int userId, int productId, int quantity) throws SQLException {
+        String sql = "INSERT INTO user_purchases (user_id, product_id, quantity) " +
+                "VALUES (?, ?, ?) " +
+                "ON CONFLICT (user_id, product_id) " +
+                "DO UPDATE SET quantity = user_purchases.quantity + EXCLUDED.quantity";
+
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, userId);
+            pstmt.setInt(2, productId);
+            pstmt.setInt(3, quantity);
+            pstmt.executeUpdate();
         }
     }
 

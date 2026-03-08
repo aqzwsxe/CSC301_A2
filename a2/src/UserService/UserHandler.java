@@ -16,6 +16,7 @@ import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Handles the given user request and generate an appropriate response.
@@ -143,12 +144,26 @@ public class UserHandler implements HttpHandler {
             return;
         }
         try {
-            if(!path.contains("/user/purchased/")){
-                String cachedResponse = userCache.get(id);
-                if (cachedResponse!=null){
-                    sendResponse(exchange, 200, cachedResponse);
-                    return;
+            if (path.contains("/user/purchased/")) {
+                Map<Integer, Integer> actualPurchases = DatabaseManager.getUserPurchases(id);
+
+                StringBuilder json = new StringBuilder("{");
+                int count = 0;
+                for (Map.Entry<Integer, Integer> entry : actualPurchases.entrySet()) {
+                    json.append(String.format("\"%d\": %d", entry.getKey(), entry.getValue()));
+                    if (++count < actualPurchases.size()) json.append(",");
                 }
+                json.append("}");
+
+                sendResponse(exchange, 200, json.toString());
+                return;
+            }
+
+            // 2. Handle Regular User Info (With Cache)
+            String cachedResponse = userCache.get(id);
+            if (cachedResponse != null) {
+                sendResponse(exchange, 200, cachedResponse);
+                return;
             }
 
             User user = DatabaseManager.getUserById(id);
@@ -156,16 +171,16 @@ public class UserHandler implements HttpHandler {
                 sendResponse(exchange, 404, "{}");
                 return; // Stop here! Don't try to get the password.
             }
-            if(path.contains("/user/purchased/") && parts.length >= 4){
-
-                if (user==null){
-                    sendResponse(exchange, 404, "{}");
-                    return;
-                }
-
-                sendResponse(exchange, 200, user.purchasesToJson());
-                return;
-            }
+//            if(path.contains("/user/purchased/") && parts.length >= 4){
+//
+//                if (user==null){
+//                    sendResponse(exchange, 404, "{}");
+//                    return;
+//                }
+//
+//                sendResponse(exchange, 200, user.purchasesToJson());
+//                return;
+//            }
 
             String hashed_password = hash_helper(user.getPassword());
             String res1 = String.format("{\n" +
@@ -275,14 +290,14 @@ public class UserHandler implements HttpHandler {
             int productId = Integer.parseInt(getJsonValue(body, "product_id"));
             int quantity = Integer.parseInt(getJsonValue(body, "quantity"));
 
-            User user = DatabaseManager.getUserById(userId);
-            if(user != null){
-                user.getPurchasedItems().merge(productId, quantity, Integer::sum);
-                sendResponse(exchange, 200, "{}");
-            }else{
-                sendResponse(exchange, 404, "{}");
-            }
-        }catch (Exception e){
+            // 1. Permanent Sync: Write to PostgreSQL
+            DatabaseManager.recordPurchase(userId, productId, quantity);
+
+            // 2. Cache Sync: Invalidate the user cache because their history changed
+            userCache.invalidate(userId);
+
+            sendResponse(exchange, 200, "{}");
+        } catch (Exception e) {
             sendResponse(exchange, 400, "{}");
         }
 

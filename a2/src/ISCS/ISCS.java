@@ -38,6 +38,18 @@ public class ISCS {
         // Replace the original one by virtual Thread
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         System.out.println("ISCS Service started on port "+ port);
+        try {
+            if (Utils.DatabaseManager.isDatabaseHealthy()) {
+                System.out.println("ISCS: Database connection verified and tables initialized.");
+                Utils.DatabaseManager.initializeTables();
+
+            }else {
+                return;
+            }
+        } catch (Exception e) {
+            System.err.println("ISCS: Critical failure during DB initialization: " + e.getMessage());
+            // Optionally exit if DB is required for start
+        }
         server.start();
     }
 }
