@@ -20,6 +20,7 @@ public class DatabaseManager {
 
     private static final HttpClient client = HttpClient.newBuilder()
             .executor(Executors.newVirtualThreadPerTaskExecutor())
+            .connectTimeout(java.time.Duration.ofSeconds(2))
             .build();
 
     private static Connection getConnection() throws SQLException{
@@ -91,7 +92,7 @@ public class DatabaseManager {
         try {
             return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                     .thenApply(HttpResponse::body)
-                    .get();
+                    .get(3, java.util.concurrent.TimeUnit.SECONDS);
         } catch (Exception e) {
             System.err.println("[RemoteDB Error] " + e.getMessage());
             return null;
@@ -121,7 +122,11 @@ public class DatabaseManager {
 //        }
 //    }
     public static void setup(String url) throws SQLException{
-        dbUrl = url;
+        if (url.startsWith("http")) {
+            dbServiceUrl = url;
+        } else {
+            dbUrl = url;
+        }
     }
 
     public static void clearAllData() throws SQLException{
@@ -134,16 +139,19 @@ public class DatabaseManager {
 
 
     public static void saveOrder(int prodId, int userId, int qty, String status) throws SQLException{
-        String json = String.format("{\"sql\": \"INSERT...\", \"params\": [%d, %d]}", prodId, userId);
+        String sql = "INSERT INTO orders (product_id, user_id, quantity, status) VALUES (?, ?, ?, ?)";
+        sendRemoteQueryAsync(sql, prodId, userId, qty, status);
+    }
+
+    private static void sendRemoteQueryAsync(String sql, Object... params) {
+        String payload = buildJson(sql, params);
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(dbServiceUrl))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
                 .build();
-
         client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
     }
-
 
 
     public static Order getOrderById(int orderId){
@@ -353,47 +361,18 @@ public class DatabaseManager {
 
 
     public static void initializeTables() throws SQLException {
-        //Enable WAL model for multiple threads to read simultaneously
-        String userTable = "CREATE TABLE IF NOT EXISTS users (" +
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "username TEXT NOT NULL, " +
-                "email TEXT NOT NULL, " +
-                "password TEXT NOT NULL" +
-                ");";
+        String userTable = "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, email TEXT NOT NULL, password TEXT NOT NULL);";
+        String productTable = "CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, price REAL NOT NULL, quantity INTEGER NOT NULL);";
+        String orderTable = "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER, user_id INTEGER, quantity INTEGER NOT NULL, status TEXT NOT NULL);";
 
-        String productTable = "CREATE TABLE IF NOT EXISTS products (" +
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "name TEXT NOT NULL, " +
-                "description TEXT, " +
-                "price REAL NOT NULL, " + // FLOAT -> REAL
-                "quantity INTEGER NOT NULL" +
-                ");";
+        // Execute these via the REMOTE service, not via getConnection()
+        sendRemoteQuery(userTable);
+        sendRemoteQuery(productTable);
+        sendRemoteQuery(orderTable);
+        sendRemoteQuery("CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);");
+        sendRemoteQuery("CREATE INDEX IF NOT EXISTS idx_orders_product ON orders(product_id);");
 
-        String orderTable = "CREATE TABLE IF NOT EXISTS orders (" +
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "product_id INTEGER, " + // Removed NOT NULL
-                "user_id INTEGER, " +    // Removed NOT NULL
-                "quantity INTEGER NOT NULL, " +
-                "status TEXT NOT NULL, " +
-                "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL, " +
-                "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL" +
-                ");";
-        try (Connection conn = getConnection();
-             Statement statement = conn.createStatement()
-        ){
-            statement.execute("PRAGMA foreign_keys = ON;");
-            statement.execute("PRAGMA journal_mode=WAL;");
-            statement.execute(userTable);
-            statement.execute(productTable);
-            statement.execute(orderTable);
-            // prevent the full table scan
-            statement.execute("CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);");
-            statement.execute("CREATE INDEX IF NOT EXISTS idx_orders_product ON orders(product_id);");
-            System.out.println("[DatabaseManager] Tables initialized successfully.");
-
-        } catch (SQLException e){
-            System.err.println("[DatabaseManager] Error initializing tables: " + e.getMessage());
-        }
+        System.out.println("[DatabaseManager] Remote tables verified/initialized.");
     }
 
 

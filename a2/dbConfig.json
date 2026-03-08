@@ -1,5 +1,5 @@
 {
   "Database": {
-    "url": "jdbc:sqlite:301A2.db"
+    "url": "http://142.1.114.76:9000/execute"
   }
 }

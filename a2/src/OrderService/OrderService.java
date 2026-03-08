@@ -43,33 +43,51 @@ public class OrderService {
         String dbConfig = (args.length > 1) ? args[1] : "dbConfig.json";
         File dbFile = new File(dbConfig);
         try {
-            if(dbFile.exists()){
-            DatabaseManager.setup(ConfigReader.getDbUrl(dbConfig)
-                    );}
-            else {
-//                DatabaseManager.setup("jdbc:sqlite:service_data.db");
-                DatabaseManager.setup("jdbc:sqlite:301A2.db");
-                System.out.println("301A2.db not found. Create 301A2.db.");
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        try {
-            DatabaseManager.initializeTables();
-            System.out.println("System ready and database initialized");
-        }catch (SQLException e){
-            System.err.println("Failed to initialize tables: " + e.getMessage());
-            return;
-        }
+            // 2. Database Initialization
+            initializeDatabase(dbConfig);
 
-        int port = ConfigReader.getPort(configFile, "OrderService");
+            // 3. Server Setup
+            int port = ConfigReader.getPort(configFile, "OrderService");
 
-        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
-        server.createContext("/", new OrderHandler(configFile));
-        server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
-        System.out.println("Order Service started on port " + port);
-        server.start();
+            // Use backlog 1000 to prevent "Connection Refused" during bursts
+            HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 1000);
+
+            server.createContext("/", new OrderHandler(configFile));
+
+            // Virtual Threads: Essential for 4,000 req/s concurrency
+            server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+
+            // 4. Graceful Shutdown Hook
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                System.out.println("Shutting down Order Service...");
+                server.stop(0);
+            }));
+
+            server.start();
+        }catch (Exception e){
+            System.err.println("Critical Failure: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
+        }
     }
 
 
+    private static void initializeDatabase(String dbConfig) throws IOException, SQLException {
+        File dbFile = new File(dbConfig);
+        String url;
+
+        if(dbFile.exists()){
+            url = ConfigReader.getDbUrl(dbConfig);
+            System.out.println("Using DB URL from config: " + url);
+        }else {
+            url = "http://142.1.114.76:9000/execute";
+            System.out.println("dbConfig not found. Defaulting to Remote VM Proxy");
+        }
+        DatabaseManager.setup(url);
+        if(! DatabaseManager.isDatabaseHealthy()){
+            throw new RuntimeException("Critical Remote Database at " + url + " is unreachable");
+        }
+        DatabaseManager.initializeTables();
+        System.out.println("Remote Database initialized.");
+    }
 }

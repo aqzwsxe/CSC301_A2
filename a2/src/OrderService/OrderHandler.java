@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -58,7 +59,11 @@ public class OrderHandler implements HttpHandler {
         String cleanIp = rawIp.replace("\"","");
 
         this.iscsUrl = "http://" + cleanIp + ":" + port;
-        this.client = HttpClient.newHttpClient();
+        // Virtual Threads
+        this.client =HttpClient.newBuilder()
+                .executor(Executors.newVirtualThreadPerTaskExecutor()) // Sync with your server executor
+                .connectTimeout(java.time.Duration.ofSeconds(2))
+                .build();;
     }
 
     /**
@@ -313,51 +318,52 @@ public class OrderHandler implements HttpHandler {
                 return;
             }
 
-            HttpResponse<String> userRes = client.send(HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/user/" + userId)).GET().build(),
-                    HttpResponse.BodyHandlers.ofString());
+            // Fire both requests in parallel
+            var userFuture = client.sendAsync(
+                    HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/user/" + userId)).GET().build(),
+                    HttpResponse.BodyHandlers.ofString()
+            );
 
-            if(userRes.statusCode() == 404){
-                sendError(exchange, 404, "Invalid Request");
-                return;
-            }
-
-            HttpResponse<String> prodRes = client.send(
+            var prodFuture = client.sendAsync(
                     HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/product/" + productId)).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
             );
 
-            if(prodRes.statusCode() == 404){
+            // Wait for both (virtual threads will yield here)
+            HttpResponse<String> userRes = userFuture.join();
+            HttpResponse<String> prodRes = prodFuture.join();
+
+            if (userRes.statusCode() == 404 || prodRes.statusCode() == 404) {
                 sendError(exchange, 404, "Invalid Request");
                 return;
             }
+
+            // Check stock
             int availableQuantity = Integer.parseInt(getJsonValue(prodRes.body(), "quantity"));
-            if(quantity > availableQuantity){
+            if (quantity > availableQuantity) {
                 sendError(exchange, 400, "Exceeded quantity limit");
                 return;
             }
 
-            int newStock = availableQuantity-quantity;
-            // Insead of sending a POST request to /product via ISCS, update the stock directly in the database inside the same
-//          // transaction as the order creation. This is faster and safer
+            int newStock = availableQuantity - quantity;
+
             boolean transactionSuccess = DatabaseManager.placeOrder(
                     Integer.parseInt(productId),
                     Integer.parseInt(userId),
                     quantity,
                     newStock
             );
-            if(transactionSuccess){
+
+            if (transactionSuccess) {
                 String successJson = String.format(
-                        "{\n" +
-                                "        \"product_id\": %s,\n" +
-                                "        \"user_id\": %s,\n" +
-                                "        \"quantity\": %d,\n" +
-                                "        \"status\": \"Success\"\n" +
-                                "    }",
+                        "{\"product_id\": %s, \"user_id\": %s, \"quantity\": %d, \"status\": \"Success\"}",
                         productId, userId, quantity);
-                sendResponse(exchange,200,successJson.getBytes());
-            }else {
+                sendResponse(exchange, 200, successJson.getBytes(StandardCharsets.UTF_8));
+            } else {
                 sendError(exchange, 500, "Database Transaction Failed");
             }
+
+
         }catch (Exception e){
             sendError(exchange, 400, "Invalid Request");
         }
@@ -387,10 +393,18 @@ public class OrderHandler implements HttpHandler {
         }else{
             builder.GET();
         }
-        System.out.println("Forward the information to the ISCS");
-        HttpResponse<byte[]> res = client.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
-        sendResponse(exchange, res.statusCode(), res.body());
-        System.out.println("Receive the response from the ISCS");
+        client.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofByteArray())
+                .thenAccept(res -> {
+                    try {
+                        sendResponse(exchange, res.statusCode(), res.body());
+                    } catch (IOException e) {
+                        // Connection likely closed by client
+                    }
+                })
+                .exceptionally(ex -> {
+                    try { sendError(exchange, 502, "Bad Gateway"); } catch (IOException ignored) {}
+                    return null;
+                });
     }
 
     /**
