@@ -48,9 +48,9 @@ public class UserService {
             DatabaseManager.setup(ConfigReader.getDbUrl(dbConfig)
                     );
         }else {
-//            DatabaseManager.setup("jdbc:sqlite:service_data.db");
-            DatabaseManager.setup("jdbc:sqlite:301A2.db");
-            System.out.println("301A2.db not found. Create 301A2.db.");
+            String fallbackUrl = "jdbc:postgresql://142.1.114.76:5432/mydb";
+            DatabaseManager.setup(fallbackUrl);
+            System.out.println("dbConfig not found. Defaulting to Remote PostgreSQL Instance at " + fallbackUrl);
         }
         try{
             DatabaseManager.initializeTables();
