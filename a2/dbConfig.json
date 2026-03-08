@@ -1,6 +1,6 @@
 {
   "Database": {
-    "url": "jdbc:postgresql://142.1.46.8:5432/mydb",
+    "url": "jdbc:postgresql://142.1.114.76:5432/mydb",
     "user": "postgres",
     "password": "password123"
   }
