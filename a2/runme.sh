@@ -7,6 +7,7 @@ OUT_DIR="compiled"
 SRC_DIR="src"
 LIB_DIR="lib"
 JDBC_JAR="$LIB_DIR/sqlite-jdbc-3.51.2.0.jar"
+JAVALIN_JAR="$LIB_DIR/javalin-6.1.3.jar"
 
 # Set Classpath Separator
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
@@ -16,7 +17,7 @@ else
 fi
 
 # Define the Classpath (Includes compiled classes and Maven dependencies)
-FULL_CP="$OUT_DIR${CP_SEP}$JDBC_JAR${CP_SEP}target/dependency/*${CP_SEP}."
+FULL_CP="$OUT_DIR${CP_SEP}$JDBC_JAR${CP_SEP}$JAVALIN_JAR${CP_SEP}$LIB_DIR/*${CP_SEP}target/dependency/*${CP_SEP}."
 
 compile_service(){
     local service=$1
