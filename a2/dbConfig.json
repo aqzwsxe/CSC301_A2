@@ -1,5 +1,5 @@
 {
   "Database": {
-    "url": "http://142.1.114.76:9000/execute"
+    "url": "jdbc:postgresql://142.1.114.76:5432/301A2_db"
   }
 }
