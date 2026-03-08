@@ -1,5 +1,5 @@
 {
   "Database": {
-    "url": "jdbc:postgresql://142.1.114.76:5432/301A2_db"
+    "url": "jdbc:postgresql://142.1.46.8:5432/mydb"
   }
 }
