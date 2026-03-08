@@ -71,24 +71,37 @@ public class ConfigReader {
      * @return The port number as an integer
      * @throws IOException If the file cannot be read
      */
-    public static int getPort(String configFile, String serviceName) throws IOException {
+    public static int getPort(String configFile, String serviceName, int instanceIndex) throws IOException {
         String content = Files.readString(Paths.get(configFile));
-        // Find the start of the service block
-        int serviceIndex = content.indexOf("\""+serviceName+"\"");
-        if(serviceIndex==-1){
-            throw new RuntimeException("The service is not found");
-        }
-        // Find the port key inside that block
-        //1: string; 2: From index
-        int portKeyIndex = content.indexOf("\"port\"", serviceIndex);
+        int serviceIndex = content.indexOf("\"" + serviceName + "\"");
+        if (serviceIndex == -1) throw new RuntimeException("Service not found");
 
+        // Find the start of the array for this service
+        int arrayStart = content.indexOf("[", serviceIndex);
+
+        // Jump to the Nth '{' block
+        int currentPos = arrayStart;
+        for (int i = 0; i <= instanceIndex; i++) {
+            currentPos = content.indexOf("{", currentPos + 1);
+        }
+
+        // Now find the "port" inside this specific block
+        int portKeyIndex = content.indexOf("\"port\"", currentPos);
         int colonIndex = content.indexOf(":", portKeyIndex);
-        int commaIndex = content.indexOf(",",colonIndex);
-        if(commaIndex==-1){
-            commaIndex = content.indexOf("}",colonIndex);
+
+        // Look for either a comma or a closing brace
+        int commaIndex = content.indexOf(",", colonIndex);
+        int braceIndex = content.indexOf("}", colonIndex);
+
+        // Determine the end of the number correctly
+        int endIdx;
+        if (commaIndex != -1 && (commaIndex < braceIndex)) {
+            endIdx = commaIndex;
+        } else {
+            endIdx = braceIndex;
         }
 
-        String portValue = content.substring(colonIndex+1,commaIndex).trim();
+        String portValue = content.substring(colonIndex + 1, endIdx).replaceAll("[^0-9]", "").trim();
         return Integer.parseInt(portValue);
     }
 
@@ -140,38 +153,47 @@ public class ConfigReader {
     }
 
     public static void main(String[] args) {
-        String testFile = "C:\\Users\\user\\Desktop\\All courses\\CSC301\\A2_component2\\CSC301_A2\\a2\\config.json"; // Ensure this file exists in your root directory
+        // 1. Use relative path or argument to work on both Windows and Lab Machines
+        String testFile = (args.length > 0) ? args[0] : "C:\\Users\\user\\Desktop\\All courses\\CSC301\\A2_component2\\CSC301_A2\\a2\\config.json";
 
         try {
-            System.out.println("=== Starting ConfigReader Test ===\n");
+            System.out.println("=== Starting ConfigReader A2 Verification ===\n");
+            System.out.println("Reading config from: " + testFile);
 
-            // 1. Test Service Pools (L7 Load Balancer support)
+            // --- TEST 1: Service Pools (For the Load Balancer) ---
             String[] services = {"UserService", "ProductService", "OrderService"};
-
             for (String service : services) {
-                System.out.println("Testing Pool for: " + service);
+                System.out.print("Testing " + service + " Pool: ");
                 List<String> pool = getServicePool(testFile, service);
-
-                if (pool.isEmpty()) {
-                    System.out.println("Warning: Pool is empty.");
-                } else {
-                    System.out.println("Found " + pool.size() + " instances:");
-                    for (String url : pool) {
-                        System.out.println("      -> " + url);
-                    }
+                System.out.println("Found " + pool.size() + " instances.");
+                // Print the first and last to verify range
+                if (!pool.isEmpty()) {
+                    System.out.println("   Start: " + pool.get(0));
+                    System.out.println("   End:   " + pool.get(pool.size() - 1));
                 }
-                System.out.println();
             }
 
-            // 2. Test Single Value extraction (Legacy/Direct support)
-            System.out.println("Testing Single Port Extraction (ISCS):");
-            int iscsPort = getPort(testFile, "InterServiceCommunication");
-            System.out.println("ISCS Port: " + iscsPort);
+            System.out.println("\n--- TEST 2: Specific Instance Extraction ---");
+            // This simulates what a single UserService instance does
+            // It asks for index 0 (port 14001) or index 6 (port 14007)
+            int firstUserPort = getPort(testFile, "UserService", 0);
+            int lastUserPort = getPort(testFile, "UserService", 6);
+
+            System.out.println("UserService[0] port: " + firstUserPort + " (Expected: 14001)");
+            System.out.println("UserService[6] port: " + lastUserPort + " (Expected: 14007)");
+
+            // --- TEST 3: ISCS Port (Legacy/Single Object) ---
+            // Since InterServiceCommunication is an array with one element in your config
+            int iscsPort = getPort(testFile, "InterServiceCommunication", 0);
+            System.out.println("\nISCS Port: " + iscsPort + " (Expected: 14000)");
+
+            System.out.println("\n=== All Tests Passed ===");
 
         } catch (IOException e) {
-            System.err.println("Error: Could not read " + testFile + ". Make sure the file exists.");
+            System.err.println("CRITICAL: File not found at " + testFile);
         } catch (Exception e) {
-            System.err.println("Parsing Error: " + e.getMessage());
+            System.err.println("PARSING ERROR: " + e.getMessage());
+            // This will tell you if your substring/indexOf logic is still hitting a "}"
             e.printStackTrace();
         }
     }

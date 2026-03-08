@@ -25,7 +25,10 @@ public class ISCS {
         }
 
         String configFile = args[0];
-        int port = ConfigReader.getPort(configFile,"InterServiceCommunication");
+        int instanceIdx = (args.length > 2) ? Integer.parseInt(args[2]) : 0;
+
+        // Use the NEW 3-argument version of getPort
+        int port = ConfigReader.getPort(configFile, "InterServiceCommunication", instanceIdx);
         // Uses a server to listen to the order service
         // It waits for an incoming connection, parses the request, and sends back a response
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);

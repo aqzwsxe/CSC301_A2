@@ -60,7 +60,10 @@ public class ProductService {
         }
 
         try{
-            int port = ConfigReader.getPort(configPath, "ProductService");
+            int instanceIdx = (args.length > 2) ? Integer.parseInt(args[2]) : 0;
+
+            // Use the NEW 3-argument version of getPort
+            int port = ConfigReader.getPort(configPath, "ProductService", instanceIdx);
             // new InetSocketAddress(port): combine the IP address and the port number
             // Don't really need to specify the ip address
             HttpServer server = HttpServer.create(new InetSocketAddress(port),0);

@@ -47,7 +47,10 @@ public class OrderService {
             initializeDatabase(dbConfig);
 
             // 3. Server Setup
-            int port = ConfigReader.getPort(configFile, "OrderService");
+            int instanceIdx = (args.length > 2) ? Integer.parseInt(args[2]) : 0;
+
+            // Use the NEW 3-argument version of getPort
+            int port = ConfigReader.getPort(configFile, "OrderService", instanceIdx);
 
             // Use backlog 1000 to prevent "Connection Refused" during bursts
             HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 1000);

@@ -54,16 +54,24 @@ public class OrderHandler implements HttpHandler {
      * @throws IOException If the configuration file cannot be accessed or parsed
      */
     public OrderHandler(String configFile) throws IOException {
+        // 1. Get the IP and Port specifically from index 0 of the InterServiceCommunication array
+        // Since there is usually only 1 Load Balancer, we use index 0.
         String rawIp = ConfigReader.getIp(configFile, "InterServiceCommunication");
-        int port = ConfigReader.getPort(configFile, "InterServiceCommunication");
-        String cleanIp = rawIp.replace("\"","");
+        int port = ConfigReader.getPort(configFile, "InterServiceCommunication", 0);
 
+        // 2. Clean the IP: Remove quotes and ensure it is trimmed
+        String cleanIp = rawIp.replace("\"", "").trim();
+
+        // 3. Build the base URL
         this.iscsUrl = "http://" + cleanIp + ":" + port;
-        // Virtual Threads
-        this.client =HttpClient.newBuilder()
-                .executor(Executors.newVirtualThreadPerTaskExecutor()) // Sync with your server executor
+
+        // 4. Initialize the HttpClient with Virtual Threads
+        this.client = HttpClient.newBuilder()
+                .executor(Executors.newVirtualThreadPerTaskExecutor())
                 .connectTimeout(java.time.Duration.ofSeconds(2))
-                .build();;
+                .build();
+
+        System.out.println("OrderHandler initialized. Talking to ISCS at: " + this.iscsUrl);
     }
 
     /**

@@ -53,7 +53,10 @@ public class WorkloadParser {
         Scanner sc = new Scanner(file, StandardCharsets.UTF_8);
 
         String configPath = "config.json";
-        int port = ConfigReader.getPort(configPath, "OrderService");
+        int instanceIdx = (args.length > 2) ? Integer.parseInt(args[2]) : 0;
+
+        // Use the NEW 3-argument version of getPort
+        int port = ConfigReader.getPort(configPath, "OrderService", instanceIdx);
         String ip = ConfigReader.getIp(configPath, "OrderService").replace("\"", "").trim();;
         orderUrl = "http://" + ip + ":" + port;
         // This tell if the user just typed ./runme.sh -w
