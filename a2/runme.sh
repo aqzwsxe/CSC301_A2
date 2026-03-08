@@ -17,7 +17,7 @@ else
 fi
 
 # Define the Classpath (Includes compiled classes and Maven dependencies)
-FULL_CP="$OUT_DIR${CP_SEP}$JDBC_JAR${CP_SEP}$JAVALIN_JAR${CP_SEP}$LIB_DIR/*${CP_SEP}target/dependency/*${CP_SEP}."
+FULL_CP="$OUT_DIR${CP_SEP}${LIB_DIR}/*${CP_SEP}."
 
 compile_service(){
     local service=$1
@@ -35,10 +35,6 @@ case "$1" in
             rm -rf "$OUT_DIR"
             mkdir -p "$OUT_DIR"
 
-            # 2. Extract dependencies from Maven
-            echo "Fetching dependencies via Maven..."
-            mvn dependency:copy-dependencies -DoutputDirectory=target/dependency -q
-
             # 3. Compile in order
             compile_service "Utils"
             compile_service "UserService"
@@ -48,6 +44,21 @@ case "$1" in
 
             echo "--- Compilation Complete ---"
             echo "Remote DB on VM (142.1.114.76) will be used at runtime."
+
+            echo "--- Compilation Complete ---"
+
+                        # 3. Trigger the Launch Script
+                        if [ -f "./launch_cluster.sh" ]; then
+                            echo "--- Triggering Cluster Launch ---"
+                            # Ensure it has execute permissions
+                            chmod +x launch_cluster.sh
+                            # Execute the script
+                            ./launch_cluster.sh
+                            echo "Finish running the launch_cluster.sh"
+                        else
+                            echo "Error: launch_cluster.sh not found in the current directory."
+                            exit 1
+                        fi
             ;;
 
 #    -u)
