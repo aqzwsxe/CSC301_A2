@@ -119,6 +119,14 @@ public class WorkloadParser {
             } else if (service.equals("PRODUCT")) {
                 handleProduct(command,parts);
             }
+
+            try {
+                // 20ms to prevent race conditions
+                // without making the total test run too slow.
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
         sc.close();
         System.out.println("All commands dispatched. Waiting for final responses");
