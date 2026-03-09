@@ -381,7 +381,7 @@ public class UserHandler implements HttpHandler {
      * @param body a JSON string containing the user id, username, email, password
      * @throws IOException if an I/O error occurs while sending the response
      */
-    public  void  handleCreate(HttpExchange exchange, int id, String body) throws IOException, NoSuchAlgorithmException, SQLException {
+    public void handleCreate(HttpExchange exchange, int id, String body) throws IOException, NoSuchAlgorithmException, SQLException {
         System.out.println("Start the handle create method");
         if(DatabaseManager.getUserById(id)!=null){
             System.out.println("User already exist");
@@ -410,20 +410,22 @@ public class UserHandler implements HttpHandler {
         }
 
 
-
-        User newUser = new User(id, username, email, password);
-        DatabaseManager.saveUserFull(id, username, email, password);
         String hashed_password = hash_helper(password);
-        String res1 = String.format("{\n" +
-                "        \"id\": %d,\n" +
-                "        \"username\": \"%s\",\n" +
-                "        \"email\": \"%s\",\n" +
-                "        \"password\": \"%s\"\n" +
-                "    }", id, username, email, hashed_password);
-        System.out.println("successfully create the user");
-        sendResponse(exchange, 200, res1);
-        return;
+        int result = DatabaseManager.saveUserFull(id, username, email, hashed_password);
 
+        if (result == -1) {
+            // Use your helper to ensure the body is written and the stream is closed
+            sendResponse(exchange, 409, "{}");
+        } else {
+            String res1 = String.format("{\n" +
+                    "        \"id\": %d,\n" +
+                    "        \"username\": \"%s\",\n" +
+                    "        \"email\": \"%s\",\n" +
+                    "        \"password\": \"%s\"\n" +
+                    "    }", id, username, email, hashed_password);
+            System.out.println("successfully create the user");
+            sendResponse(exchange, 200, res1);
+        }
 
     }
 
