@@ -137,13 +137,13 @@ public class OrderHandler implements HttpHandler {
                     // Keep the database
                     System.out.println("OrderService: First is Restart. Persisting data.");
                     signalInternalServices("restart");
-                    debugOrSend(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
+                    debugOrSend(exchange, 200, requestBody);
                     return;
                 }else if(temp_path.equals("/clear")){
                     System.out.println("OrderService: First request is " + path + ". Wiping DB.");
                     DatabaseManager.clearAllData();
                     signalInternalServices("clear");
-                    debugOrSend(exchange, 200, "{\"status\": \"Database cleared\"}".getBytes());
+                    debugOrSend(exchange, 200, requestBody);
                     return;
                 }
                 //else {
@@ -157,7 +157,7 @@ public class OrderHandler implements HttpHandler {
             // do nothing to the database
             if(temp_path.equals("/restart")){
                 signalInternalServices("restart");
-                debugOrSend(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
+                debugOrSend(exchange, 200, requestBody);
                 return;
 
             }
@@ -165,14 +165,14 @@ public class OrderHandler implements HttpHandler {
             if (temp_path.equals("/clear")) {
                 DatabaseManager.clearAllData();
                 signalInternalServices("clear");
-                debugOrSend(exchange, 200, "{\"status\": \"Database cleared\"}".getBytes());
+                debugOrSend(exchange, 200, requestBody);
                 return;
             }
 
             if (temp_path.equals("/shutdown")){
                 System.out.println("OrderService: Shutting down all services");
                 signalInternalServices("shutdown");
-                debugOrSend(exchange, 200, "{\"status\": \"Shutting down\"}".getBytes());
+                debugOrSend(exchange, 200, requestBody);
                 new Thread(() -> {
                     try { Thread.sleep(500); System.exit(0); }
                     catch (Exception ignored) {}
@@ -184,10 +184,10 @@ public class OrderHandler implements HttpHandler {
 
             if(method.equalsIgnoreCase("GET") ){
                 if(path.startsWith("/user/purchased/")){
-                    handleUserPurchased(exchange,path);
+                    handleUserPurchased(exchange,path, requestBody);
                     return;
                 }else if(path.startsWith("/order/")){
-                    handleGetOrder(exchange, path);
+                    handleGetOrder(exchange, path, requestBody);
                     return;
                 }else if(path.startsWith("/user/")){
                     handleGetUser(exchange, method, path, requestBody);
@@ -198,15 +198,15 @@ public class OrderHandler implements HttpHandler {
                     return;
                 }
             }else if(method.equalsIgnoreCase("DELETE")&& path.startsWith("/order/")){
-                handleCancelOrder(exchange, path);
+                handleCancelOrder(exchange, path, requestBody);
             } else if(method.equalsIgnoreCase("POST") && path.startsWith("/order")  && bodyString.contains("place order")){
-                handlePlaceOrder(exchange, bodyString);
+                handlePlaceOrder(exchange, bodyString,requestBody);
             }else{
                 forwardToISCS(exchange,method,path,requestBody);
             }
         }catch (Exception e){
             try {
-                sendError(exchange, 400, "Invalid Request");
+                sendError(exchange, 400, "Invalid Request", requestBody);
             }catch (Exception e1){}
 
         }
@@ -217,7 +217,7 @@ public class OrderHandler implements HttpHandler {
             // The assignment says OrderService handles user functionality by forwarding.
             forwardToISCS(exchange, method, path, requestBody);
         } catch (InterruptedException e) {
-            sendError(exchange, 500, "Internal Server Error");
+            sendError(exchange, 500, "Internal Server Error", requestBody);
         }
     }
 
@@ -225,7 +225,7 @@ public class OrderHandler implements HttpHandler {
         try {
             forwardToISCS(exchange, method, path, requestBody);
         } catch (InterruptedException e) {
-            sendError(exchange, 500, "Internal Server Error");
+            sendError(exchange, 500, "Internal Server Error", requestBody);
         }
     }
     /**
@@ -242,10 +242,11 @@ public class OrderHandler implements HttpHandler {
      * @param path the request URI path; must be non-null
      * @throws IOException if an I/O error occurs while sending the response
      */
-    private void handleGetOrder(HttpExchange exchange, String path) throws IOException {
+    private void handleGetOrder(HttpExchange exchange, String path, byte[] requestBody) throws IOException {
         String[] parts = path.split("/");
         if (parts.length < 3){
-            sendError(exchange,400, "{}");
+            String s1 = new String(requestBody);
+            sendError(exchange,400, s1, requestBody);
             return;
         }
         try {
@@ -253,7 +254,7 @@ public class OrderHandler implements HttpHandler {
 
             String cached = orderCache.get(orderId);
             if (cached != null){
-                debugOrSend(exchange, 200, cached.getBytes());
+                debugOrSend(exchange, 200, requestBody);
                 return;
             }
 
@@ -261,12 +262,14 @@ public class OrderHandler implements HttpHandler {
             if(order != null){
                 String json1 = order.toJson();
                 orderCache.put(orderId, json1);
-                debugOrSend(exchange, 200, order.toJson().getBytes());
+                debugOrSend(exchange, 200, requestBody);
             }else{
-                sendError(exchange, 404, "{}");
+                String s1 = new String(requestBody);
+                sendError(exchange, 404, s1, requestBody);
             }
         }catch (NumberFormatException e){
-            sendError(exchange, 400, "Invalid Order ID format");
+            String s1 = new String(requestBody);
+            sendError(exchange, 400, s1, requestBody);
             return;
         }
     }
@@ -285,22 +288,22 @@ public class OrderHandler implements HttpHandler {
      * @param path the request URI path; must be non-null
      * @throws IOException if an I/O error occurs while sending the response
      */
-    private void handleCancelOrder(HttpExchange exchange, String path) throws IOException {
+    private void handleCancelOrder(HttpExchange exchange, String path, byte[] requestBody) throws IOException {
         String[] parts = path.split("/");
         if(parts.length < 3){
-            sendError(exchange, 400, "Invalid Order ID");
+            sendError(exchange, 400, "Invalid Order ID", requestBody);
         }
 
         try {
             int orderId = Integer.parseInt(parts[2]);
             Order order = DatabaseManager.getOrderById(orderId);
             if(order==null){
-                sendError(exchange, 404, "Order not found");
+                sendError(exchange, 404, "Order not found", requestBody);
                 return;
             }
 
             if ("Cancelled".equalsIgnoreCase(order.getStatus())){
-                sendError(exchange, 400, "Order already cancelled");
+                sendError(exchange, 400, "Order already cancelled", requestBody);
                 return;
             }
             HttpResponse<String> prodRes = client.send(
@@ -315,16 +318,17 @@ public class OrderHandler implements HttpHandler {
                 boolean success = DatabaseManager.cancelOrder(orderId, order.getProduct_id(), restoredStock);
                 if(success){
                     orderCache.invalidate(orderId);
-                    debugOrSend(exchange, 200, "{\"status\": \"Order cancelled and stock restored\"}".getBytes());
+                    debugOrSend(exchange, 200, requestBody);
                     return;
                 }else {
-                    sendError(exchange, 500, "Database Transaction Failed");
+                    sendError(exchange, 500, "Database Transaction Failed", requestBody);
                 }
             } else {
-                sendError(exchange, 404, "Product associated with order no longer exists");
+                sendError(exchange, 404, "Product associated with order no longer exists", requestBody);
             }
         }catch (Exception e){
-            sendError(exchange, 400, "{}");
+            String s1 = new String(requestBody);
+            sendError(exchange, 400, s1, requestBody);
         }
     }
 
@@ -343,7 +347,7 @@ public class OrderHandler implements HttpHandler {
      * @param body a JSON string containing the product id, user id, and quantity
      * @throws IOException if an I/O error occurs while sending the response
      */
-    private  void  handlePlaceOrder(HttpExchange exchange, String body) throws IOException, InterruptedException {
+    private  void  handlePlaceOrder(HttpExchange exchange, String body, byte[] requestBody) throws IOException, InterruptedException {
         try {
             String userId = getJsonValue(body, "user_id");
             String productId = getJsonValue(body, "product_id");
@@ -353,13 +357,13 @@ public class OrderHandler implements HttpHandler {
             if(userId==null || productId == null || quantityStr == null ||
                     userId.equals("invalid-info") || productId.equals("invalid-info") || quantityStr.equals("invalid-info")){
                 System.out.println("Enter the if statement; something is null");
-                sendError(exchange,400, "Invalid Request");
+                sendError(exchange,400, "Invalid Request", requestBody);
                 return;
             }
 
             int quantity = Integer.parseInt(quantityStr);
             if(quantity <= 0){
-                sendError(exchange, 400, "Invalid Request");
+                sendError(exchange, 400, "Invalid Request", requestBody);
                 return;
             }
 
@@ -379,14 +383,14 @@ public class OrderHandler implements HttpHandler {
             HttpResponse<String> prodRes = prodFuture.join();
 
             if (userRes.statusCode() == 404 || prodRes.statusCode() == 404) {
-                sendError(exchange, 404, "Invalid Request");
+                sendError(exchange, 404, "Invalid Request",requestBody);
                 return;
             }
 
             // Check stock
             int availableQuantity = Integer.parseInt(getJsonValue(prodRes.body(), "quantity"));
             if (quantity > availableQuantity) {
-                sendError(exchange, 400, "Exceeded quantity limit");
+                sendError(exchange, 400, "Exceeded quantity limit",requestBody);
                 return;
             }
 
@@ -398,19 +402,18 @@ public class OrderHandler implements HttpHandler {
                     quantity,
                     newStock
             );
-
             if (transactionSuccess) {
                 String successJson = String.format(
                         "{\"product_id\": %s, \"user_id\": %s, \"quantity\": %d, \"status\": \"Success\"}",
                         productId, userId, quantity);
-                debugOrSend(exchange, 200, successJson.getBytes(StandardCharsets.UTF_8));
+                debugOrSend(exchange, 200, requestBody);
             } else {
-                sendError(exchange, 500, "Database Transaction Failed");
+                sendError(exchange, 500, "Database Transaction Failed",requestBody);
             }
 
 
         }catch (Exception e){
-            sendError(exchange, 400, "Invalid Request");
+            sendError(exchange, 400, "Invalid Request",requestBody);
         }
 
 
@@ -447,7 +450,7 @@ public class OrderHandler implements HttpHandler {
                     }
                 })
                 .exceptionally(ex -> {
-                    try { sendError(exchange, 502, "Bad Gateway"); } catch (IOException ignored) {}
+                    try { sendError(exchange, 502, "Bad Gateway", requestBody); } catch (IOException ignored) {}
                     return null;
                 });
     }
@@ -482,9 +485,10 @@ public class OrderHandler implements HttpHandler {
      * @param message the error message
      * @throws IOException if an I/O error occurs while sending headers or writing the body
      */
-    private void sendError(HttpExchange exchange, int code, String message) throws IOException {
+    private void sendError(HttpExchange exchange, int code, String message, byte[] requestBody) throws IOException {
         String json = String.format("{\"status\": \"%s\"}\n", message);
-        debugOrSend(exchange, code, json.getBytes());
+        // Passing requestBody here allows debugOrSend to show what caused the error
+        debugOrSend(exchange, code, requestBody);
     }
 
     /**
@@ -528,10 +532,10 @@ public class OrderHandler implements HttpHandler {
     }
 
 
-    private void handleUserPurchased(HttpExchange exchange, String path) throws IOException {
+    private void handleUserPurchased(HttpExchange exchange, String path, byte[] requestBody) throws IOException {
         String[] parts = path.split("/");
         if(parts.length < 4){
-            sendError(exchange, 400, "Invalid User ID");
+            sendError(exchange, 400, "Invalid User ID", requestBody);
             return;
         }
 
@@ -540,17 +544,19 @@ public class OrderHandler implements HttpHandler {
             int userId = Integer.parseInt(userIdStr);
 
             if(!userExists(userIdStr)){
-                sendError(exchange, 404, "User Not Found");
+                sendError(exchange, 404, "User Not Found", requestBody);
                 return;
             }
             // Aggregate purchases
             Map<Integer, Integer> purchases = DatabaseManager.getUserPurchases(userId);
             String jsonResponse = mapToJson(purchases);
-            debugOrSend(exchange, 200, jsonResponse.getBytes(StandardCharsets.UTF_8));
+            debugOrSend(exchange, 200, requestBody);
         }catch (NumberFormatException e){
-            sendError(exchange, 400, "Invalid ID format");
+            String s1 = new String(requestBody);
+            sendError(exchange, 400, s1, requestBody);
         }catch (Exception e){
-            sendError(exchange, 500, "Internal Server Error");
+            String s1 = new String(requestBody);
+            sendError(exchange, 500, "Internal Server Error",requestBody);
         }
     }
 

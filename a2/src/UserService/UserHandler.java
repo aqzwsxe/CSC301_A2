@@ -26,19 +26,23 @@ public class UserHandler implements HttpHandler {
     private static final CacheManager<Integer, String> userCache = new CacheManager<>();
     private static final boolean DEBUG_MODE = true;
 
-    private void debugOrSend(HttpExchange exchange, int status, String message) throws IOException {
+    private void debugOrSend(HttpExchange exchange, int status, byte[] responseMessage, byte[] originalRequest) throws IOException {
         if (DEBUG_MODE) {
-            // Re-use your logic to send the technical details
+            String requestStr = new String(originalRequest, StandardCharsets.UTF_8);
+            String responseStr = new String(responseMessage, StandardCharsets.UTF_8);
+
             StringBuilder sb = new StringBuilder();
-            sb.append("{\n");
-            sb.append("  \"debug_msg\": \"").append(message.replace("\"", "\\\"")).append("\",\n");
-            sb.append("  \"method\": \"").append(exchange.getRequestMethod()).append("\",\n");
-            sb.append("  \"path\": \"").append(exchange.getRequestURI().getPath()).append("\"\n");
-            sb.append("}");
-            sendResponse(exchange, status, sb.toString());
+            sb.append("Request: \n").append(requestStr).append("\n\n");
+            sb.append("Response: \n").append(responseStr);
+
+            byte[] combinedOutput = sb.toString().getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "text/plain");
+            exchange.sendResponseHeaders(status, combinedOutput.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(combinedOutput);
+            }
         } else {
-            // Send the actual message (the JSON user object, etc.)
-            sendResponse(exchange, status, message);
+            sendResponse(exchange, status, new String(responseMessage, StandardCharsets.UTF_8));
         }
     }
 
@@ -52,6 +56,7 @@ public class UserHandler implements HttpHandler {
      */
     @Override
     public void handle(HttpExchange exchange) throws IOException {
+        byte[] requestBody = exchange.getRequestBody().readAllBytes();
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
         System.out.println("[User] method: " + method);
@@ -61,35 +66,35 @@ public class UserHandler implements HttpHandler {
                 path.equals("/clear") ||
                 path.equals("/restart") ||
                 path.equals("/shutdown")) {
-            handleInternalSignal(exchange, path);
+            handleInternalSignal(exchange, path, requestBody);
             return;
         }
         try {
             if(method.equals("GET")){
                 System.out.println("Try to call handle get");
-                handleGet(exchange,path);
+                handleGet(exchange,path,requestBody);
             } else if (method.equals("POST")) {
-                handlePost(exchange);
+                handlePost(exchange,path, requestBody);
             }
         }catch (Exception e){
             System.out.println(e.getMessage());
         }
     }
 
-    private void handleInternalSignal(HttpExchange exchange, String path) throws IOException {
+    private void handleInternalSignal(HttpExchange exchange, String path, byte[] requestBody) throws IOException {
         if (path.endsWith("/clear")) {
             try {
                 DatabaseManager.clearAllData();
                 User.id_counter.set(0);
                 userCache.clear();
-                debugOrSend(exchange, 200, "{}");
+                debugOrSend(exchange, 200, "{}".getBytes(), requestBody);
             } catch (SQLException e) {
-                debugOrSend(exchange, 500, "{}");
+                debugOrSend(exchange, 500, "{}".getBytes(), requestBody);
             }
         } else if (path.endsWith("/restart")) {
-            debugOrSend(exchange, 200, "{}");
+            debugOrSend(exchange, 200, "{}".getBytes(), requestBody);
         } else if (path.endsWith("/shutdown")) {
-            debugOrSend(exchange, 200, "{}");
+            debugOrSend(exchange, 200, "{}".getBytes(), requestBody);
             new Thread(() -> {
                 try { Thread.sleep(200); System.exit(0); } catch (Exception ignored) {}
             }).start();
@@ -146,18 +151,18 @@ public class UserHandler implements HttpHandler {
      * @param path the request URI path; must be non-null
      * @throws IOException if an I/O error occurs while sending the response
      */
-    private void handleGet(HttpExchange exchange, String path) throws IOException {
+    private void handleGet(HttpExchange exchange, String path, byte[] requestBody) throws IOException {
         String[] parts = path.split("/");
         if(parts.length < 3){
             // debugOrSend
-            debugOrSend(exchange, 400, "Request is less than length 3");
+            debugOrSend(exchange, 400, "Request path length is less than 3".getBytes(StandardCharsets.UTF_8), requestBody);
             return;
         }
         int id;
         try {
             id = Integer.parseInt(parts[parts.length - 1]);
         } catch (Exception e) {
-            debugOrSend(exchange, 400, e.getMessage());
+            debugOrSend(exchange, 400, "Invalid ID format".getBytes(StandardCharsets.UTF_8), requestBody);
             return;
         }
         try {
@@ -172,20 +177,20 @@ public class UserHandler implements HttpHandler {
                 }
                 json.append("}");
 
-                debugOrSend(exchange, 200, json.toString());
+                debugOrSend(exchange, 200, json.toString().getBytes(StandardCharsets.UTF_8), requestBody);
                 return;
             }
 
             // 2. Handle Regular User Info (With Cache)
             String cachedResponse = userCache.get(id);
             if (cachedResponse != null) {
-                debugOrSend(exchange, 200, cachedResponse);
+                debugOrSend(exchange, 200, cachedResponse.getBytes(StandardCharsets.UTF_8), requestBody);
                 return;
             }
 
             User user = DatabaseManager.getUserById(id);
             if (user == null) {
-                debugOrSend(exchange, 404, "The user does not exist");
+                debugOrSend(exchange, 404, "The user does not exist".getBytes(), requestBody);
                 return; // Stop here! Don't try to get the password.
             }
 //            if(path.contains("/user/purchased/") && parts.length >= 4){
@@ -209,15 +214,15 @@ public class UserHandler implements HttpHandler {
 
             userCache.put(user.getId(), res1);
             if(user!=null){
-                debugOrSend(exchange, 200, res1);
+                debugOrSend(exchange, 200, res1.getBytes(), requestBody);
                 return;
             }
             else{
-                debugOrSend(exchange,404, "the user does not exist");
+                debugOrSend(exchange,404, "the user does not exist".getBytes(), requestBody);
                 return;
             }
         }catch (NumberFormatException e){
-            debugOrSend(exchange, 400, "NumberFormatException");
+            debugOrSend(exchange, 400, "NumberFormatException".getBytes(), requestBody);
             return;
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
@@ -237,34 +242,33 @@ public class UserHandler implements HttpHandler {
      * @param exchange the HTTP exchange used to read and write the response; must be non-null
      * @throws IOException if an I/O error occurs while sending the response
      */
-    private void handlePost(HttpExchange exchange) throws IOException, NoSuchAlgorithmException, SQLException {
-        InputStream is = exchange.getRequestBody();
-        String body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+    private void handlePost(HttpExchange exchange, String body, byte[] requestBody) throws IOException, NoSuchAlgorithmException, SQLException {
+//        InputStream is = exchange.getRequestBody();
+//        String body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
 //        System.out.println("inside the handlePost: "+body);
         String path = exchange.getRequestURI().getPath();
         if (path.contains("/internal/")) {
-            handleInternalSignal(exchange, path);
+            handleInternalSignal(exchange, path, requestBody);
             return;
         }
         String command = getJsonValue(body, "command");
         String idStr = getJsonValue(body, "id");
         // this part handles create and delete and update
         if(command == null){
-            debugOrSend(exchange, 400, "{\"error\": \"No command found\"}");
+            debugOrSend(exchange, 400, "{\"error\": \"No command found\"}".getBytes(), requestBody);
             return;
         }
         switch (command){
             case "clear":
                 DatabaseManager.clearAllData();
                 User.id_counter.set(0);
-                debugOrSend(exchange, 200, "{}");
+                debugOrSend(exchange, 200, "{}".getBytes(), requestBody);
                 return;
             case "restart":
-                debugOrSend(exchange, 200, "{}");
+                debugOrSend(exchange, 200, "{}".getBytes(), requestBody);
                 return;
             case  "shutdown":
-
-                debugOrSend(exchange, 200, "{}");
+                debugOrSend(exchange, 200, "{}".getBytes(), requestBody);
                 new Thread(()->{try {Thread.sleep(200); System.exit(0);
                 } catch (Exception e) {
 
@@ -272,12 +276,12 @@ public class UserHandler implements HttpHandler {
                 }).start();
                 return;
             case "updatePurchase":
-                handleInternalPurchaseUpdate(exchange, body);
+                handleInternalPurchaseUpdate(exchange, body, requestBody);
                 return;
         }
 
         if(idStr == null || idStr.equals("invalid-info")){
-            debugOrSend(exchange, 400, "{}");
+            debugOrSend(exchange, 400, "{}".getBytes(), requestBody);
             return;
         }
         int id = Integer.parseInt(idStr);
@@ -285,23 +289,23 @@ public class UserHandler implements HttpHandler {
         // command: represent the value associated with the command key inside the JSON payload
         switch (command){
             case "create":
-                handleCreate(exchange,id,body);
+                handleCreate(exchange,id,body, requestBody);
                 break;
             case "update":
-                handleUpdate(exchange,id,body);
+                handleUpdate(exchange,id,body, requestBody);
                 break;
             case "delete":
-                handleDelete(exchange, id, body);
+                handleDelete(exchange, id, body, requestBody);
                 break;
             default:
-                debugOrSend(exchange, 400, "{}");
+                debugOrSend(exchange, 400, "{}".getBytes(), requestBody);
                 return;
 
         }
 
     }
 
-    private void handleInternalPurchaseUpdate(HttpExchange exchange, String body) throws IOException{
+    private void handleInternalPurchaseUpdate(HttpExchange exchange, String body, byte[] requestBody) throws IOException{
         try {
             int userId = Integer.parseInt(getJsonValue(body, "user_id"));
             int productId = Integer.parseInt(getJsonValue(body, "product_id"));
@@ -313,9 +317,9 @@ public class UserHandler implements HttpHandler {
             // 2. Cache Sync: Invalidate the user cache because their history changed
             userCache.invalidate(userId);
 
-            debugOrSend(exchange, 200, "{}");
+            debugOrSend(exchange, 200, "{}".getBytes(StandardCharsets.UTF_8), requestBody);
         } catch (Exception e) {
-            debugOrSend(exchange, 400, "Encounter an exception in handleInternalPurchaseUpdate");
+            debugOrSend(exchange, 400, "Encounter an exception in handleInternalPurchaseUpdate".getBytes(), requestBody);
         }
 
     }
@@ -398,17 +402,17 @@ public class UserHandler implements HttpHandler {
      * @param body a JSON string containing the user id, username, email, password
      * @throws IOException if an I/O error occurs while sending the response
      */
-    public void handleCreate(HttpExchange exchange, int id, String body) throws IOException, NoSuchAlgorithmException, SQLException {
+    public void handleCreate(HttpExchange exchange, int id, String body, byte[] requestBody) throws IOException, NoSuchAlgorithmException, SQLException {
         System.out.println("Start the handle create method");
         if(DatabaseManager.getUserById(id)!=null){
             System.out.println("User already exist");
-            debugOrSend(exchange,409,"User already exist");
+            debugOrSend(exchange,409,"User already exist".getBytes(), requestBody);
             return;
         }
 
         String username = getJsonValue(body, "username");
         if(username == null || username.isEmpty()){
-            debugOrSend(exchange, 400, "The username is invalid");
+            debugOrSend(exchange, 400, "The username is invalid".getBytes(), requestBody);
             return;
         }
         String email = getJsonValue(body, "email");
@@ -417,12 +421,12 @@ public class UserHandler implements HttpHandler {
                 email==null || email.isEmpty()||
                 password==null||password.isEmpty()){
             System.out.println("sth is null");
-            debugOrSend(exchange,400, "username/email/password is wrong");
+            debugOrSend(exchange,400, "username/email/password is wrong".getBytes(),requestBody);
             return;
         }
         if (!checkEmail(email)){
             System.out.println("The email is invalid");
-            debugOrSend(exchange,400, "The Email is invalid");
+            debugOrSend(exchange,400, "The Email is invalid".getBytes(), requestBody);
             return;
         }
 
@@ -432,7 +436,7 @@ public class UserHandler implements HttpHandler {
 
         if (result == -1) {
             // Use your helper to ensure the body is written and the stream is closed
-            debugOrSend(exchange, 409, "result == -1");
+            debugOrSend(exchange, 409, "result == -1".getBytes(), requestBody);
         } else {
             String res1 = String.format("{\n" +
                     "        \"id\": %d,\n" +
@@ -441,7 +445,7 @@ public class UserHandler implements HttpHandler {
                     "        \"password\": \"%s\"\n" +
                     "    }", id, username, email, hashed_password);
             System.out.println("successfully create the user");
-            debugOrSend(exchange, 200, res1);
+            debugOrSend(exchange, 200, res1.getBytes(),requestBody);
         }
 
     }
@@ -461,10 +465,10 @@ public class UserHandler implements HttpHandler {
      * @param body a JSON string containing the user id, username, email, password
      * @throws IOException if an I/O error occurs while sending the response
      */
-    public  void handleUpdate(HttpExchange exchange, int id, String body) throws IOException, NoSuchAlgorithmException, SQLException {
+    public  void handleUpdate(HttpExchange exchange, int id, String body, byte[] requestBody) throws IOException, NoSuchAlgorithmException, SQLException {
         User user = DatabaseManager.getUserById(id);
         if(user==null){
-            debugOrSend(exchange, 404, "the user you try to update does not exist");
+            debugOrSend(exchange, 404, "the user you try to update does not exist".getBytes(), requestBody);
             return;
         }
 
@@ -475,19 +479,19 @@ public class UserHandler implements HttpHandler {
         // 1: if the email has an invalid type (the email does not have exact one @)
         // 2: newEmail if empty
         if (newEmail!=null && (newEmail.isEmpty() || !checkEmail(newEmail))) {
-            debugOrSend(exchange, 400, "email is null or empty");
+            debugOrSend(exchange, 400, "email is null or empty".getBytes(), requestBody);
             return;
         }
 
         if(newPassword != null && newPassword.isEmpty()){
-            debugOrSend(exchange, 400, "Password is null or empty");
+            debugOrSend(exchange, 400, "Password is null or empty".getBytes(), requestBody);
             return;
         }
 
 
         // According to the instruction: only update the info that are exist
         if(newUsername != null && newUsername.isEmpty()){ // Add empty check
-            debugOrSend(exchange, 400, "username is null or username is empty");
+            debugOrSend(exchange, 400, "username is null or username is empty".getBytes(), requestBody);
             return;
         }
         if(newUsername!=null){
@@ -509,7 +513,7 @@ public class UserHandler implements HttpHandler {
                 "        \"email\": \"%s\",\n" +
                 "        \"password\": \"%s\"\n" +
                 "    }", id, user.getUsername(), user.getEmail(), hashed_password);
-        debugOrSend(exchange, 200, res1);
+        debugOrSend(exchange, 200, res1.getBytes(), requestBody);
         return;
     }
 
@@ -528,10 +532,10 @@ public class UserHandler implements HttpHandler {
      * @param body a JSON string containing the user id, username, email, password
      * @throws IOException if an I/O error occurs while sending the response
      */
-    public void handleDelete(HttpExchange exchange, int id, String body) throws IOException, NoSuchAlgorithmException, SQLException {
+    public void handleDelete(HttpExchange exchange, int id, String body, byte[] requestBody) throws IOException, NoSuchAlgorithmException, SQLException {
         User user = DatabaseManager.getUserById(id);
         if(user==null){
-            debugOrSend(exchange,404, "user is null");
+            debugOrSend(exchange,404, "user is null".getBytes(), requestBody);
             return;
         }
 
@@ -542,7 +546,7 @@ public class UserHandler implements HttpHandler {
 
         if(reqUser == null || reqEmail == null || reqPassword == null ||
                 reqUser.equals("invalid-info") || reqEmail.equals("invalid-info") || reqPassword.equals("invalid-info")){
-            debugOrSend(exchange, 400, "user/email/password is null/invlid");
+            debugOrSend(exchange, 400, "user/email/password is null/invlid".getBytes(), requestBody);
             return;
         }
         String hashedStored = hash_helper(user.getPassword());
@@ -555,10 +559,10 @@ public class UserHandler implements HttpHandler {
         if(match){
             DatabaseManager.deleteUser(id);
             userCache.invalidate(id);
-            debugOrSend(exchange, 200, "Delete successfully");
+            debugOrSend(exchange, 200, "Delete successfully".getBytes(), requestBody);
             return;
         } else{
-            debugOrSend(exchange, 404, "Cannot find a matched user");
+            debugOrSend(exchange, 404, "Cannot find a matched user".getBytes(), requestBody);
             return;
         }
 
