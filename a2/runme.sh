@@ -48,17 +48,17 @@ case "$1" in
             echo "--- Compilation Complete ---"
 
                         # 3. Trigger the Launch Script
-                        if [ -f "./launch_cluster.sh" ]; then
-                            echo "--- Triggering Cluster Launch ---"
-                            # Ensure it has execute permissions
-                            chmod +x launch_cluster.sh
-                            # Execute the script
-                            ./launch_cluster.sh
-                            echo "Finish running the launch_cluster.sh"
-                        else
-                            echo "Error: launch_cluster.sh not found in the current directory."
-                            exit 1
-                        fi
+#                        if [ -f "./launch_cluster.sh" ]; then
+#                            echo "--- Triggering Cluster Launch ---"
+#                            # Ensure it has execute permissions
+#                            chmod +x launch_cluster.sh
+#                            # Execute the script
+#                            ./launch_cluster.sh
+#                            echo "Finish running the launch_cluster.sh"
+#                        else
+#                            echo "Error: launch_cluster.sh not found in the current directory."
+#                            exit 1
+#                        fi
             ;;
 
 #    -u)

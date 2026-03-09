@@ -27,25 +27,25 @@ start_service() {
 
 # 4. Host-Specific Logic
 case $HOSTNAME in
-  "Dh2026pc06")
+  "dh2026pc06")
     echo "Host pc06: Starting UserServices..."
     for i in {0..6}; do
         start_service "UserService.UserService" $((14001 + i)) $i
     done
     ;;
-  "Dh2026pc07")
+  "dh2026pc07")
     echo "Host pc07: Starting ProductServices..."
     for i in {0..6}; do
         start_service "ProductService.ProductService" $((15001 + i)) $i
     done
     ;;
-  "Dh2026pc09")
+  "dh2026pc09")
     echo "Host pc09: Starting OrderServices..."
     for i in {0..6}; do
         start_service "OrderService.OrderService" $((16001 + i)) $i
     done
     ;;
-  "Dh2026pc10")
+  "dh2026pc10")
     echo "Host pc10: Starting ISCS Bridge..."
     start_service "ISCS.ISCS" 17001 0
     ;;
