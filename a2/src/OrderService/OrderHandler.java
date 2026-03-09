@@ -44,6 +44,20 @@ public class OrderHandler implements HttpHandler {
     private static AtomicBoolean isFirstRequest = new AtomicBoolean(true);
 
 
+
+    private void debugExchange(HttpExchange exchange) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\n");
+        sb.append("  \"method\": \"").append(exchange.getRequestMethod()).append("\",\n");
+        sb.append("  \"path\": \"").append(exchange.getRequestURI().getPath()).append("\",\n");
+        sb.append("  \"headers\": \"").append(exchange.getRequestHeaders().entrySet().toString()).append("\"\n");
+        sb.append("}");
+
+        byte[] debugBytes = sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        sendResponse(exchange, 200, debugBytes);
+    }
+
     /**
      * The constructor of OrderHandler. It constructs an Orderhandler by resolving the
      * location of the ISCS. This constructor parses the configuration file to obtain the network coordinates (IP and Port)
@@ -86,6 +100,7 @@ public class OrderHandler implements HttpHandler {
      */
     @Override
     public void handle(HttpExchange exchange) throws IOException {
+        debugExchange(exchange);
         String method = exchange.getRequestMethod();
         byte[] requestBody = exchange.getRequestBody().readAllBytes();
         String bodyString = new String(requestBody, StandardCharsets.UTF_8);
