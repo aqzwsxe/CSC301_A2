@@ -49,7 +49,7 @@ case $HOSTNAME in
     echo "Host pc10: Starting ISCS Bridge..."
     start_service "ISCS.ISCS" 17001 0
     ;;
-  "Dh2026pc11")
+  "dh2026pc11")
     echo "Host pc11: Starting Load Balancer..."
     start_service "LoadBalancer.LoadBalancer" 18001 0
     ;;
