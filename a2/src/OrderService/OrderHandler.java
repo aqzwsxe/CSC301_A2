@@ -43,6 +43,28 @@ public class OrderHandler implements HttpHandler {
      */
     private static AtomicBoolean isFirstRequest = new AtomicBoolean(true);
 
+    private static final boolean DEBUG_MODE = true;
+
+    private void debugOrSend(HttpExchange exchange, int status, byte[] message) throws IOException {
+        if (DEBUG_MODE) {
+            // Convert the byte[] message to a String to include in the debug JSON
+            String messageStr = new String(message, StandardCharsets.UTF_8);
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("{\n");
+            // Escape quotes to prevent breaking the debug JSON structure
+            sb.append("  \"debug_msg\": \"").append(messageStr.replace("\"", "\\\"")).append("\",\n");
+            sb.append("  \"method\": \"").append(exchange.getRequestMethod()).append("\",\n");
+            sb.append("  \"path\": \"").append(exchange.getRequestURI().getPath()).append("\"\n");
+            sb.append("}");
+
+            byte[] debugBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+            sendResponse(exchange, status, debugBytes);
+        } else {
+            // Send the raw byte array directly
+            sendResponse(exchange, status, message);
+        }
+    }
 
 
 //    private void debugExchange(HttpExchange exchange) throws IOException {
@@ -115,13 +137,13 @@ public class OrderHandler implements HttpHandler {
                     // Keep the database
                     System.out.println("OrderService: First is Restart. Persisting data.");
                     signalInternalServices("restart");
-                    sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
+                    debugOrSend(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
                     return;
                 }else if(temp_path.equals("/clear")){
                     System.out.println("OrderService: First request is " + path + ". Wiping DB.");
                     DatabaseManager.clearAllData();
                     signalInternalServices("clear");
-                    sendResponse(exchange, 200, "{\"status\": \"Database cleared\"}".getBytes());
+                    debugOrSend(exchange, 200, "{\"status\": \"Database cleared\"}".getBytes());
                     return;
                 }
                 //else {
@@ -135,7 +157,7 @@ public class OrderHandler implements HttpHandler {
             // do nothing to the database
             if(temp_path.equals("/restart")){
                 signalInternalServices("restart");
-                sendResponse(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
+                debugOrSend(exchange, 200, "{\"status\": \"Restarted\"}".getBytes());
                 return;
 
             }
@@ -143,14 +165,14 @@ public class OrderHandler implements HttpHandler {
             if (temp_path.equals("/clear")) {
                 DatabaseManager.clearAllData();
                 signalInternalServices("clear");
-                sendResponse(exchange, 200, "{\"status\": \"Database cleared\"}".getBytes());
+                debugOrSend(exchange, 200, "{\"status\": \"Database cleared\"}".getBytes());
                 return;
             }
 
             if (temp_path.equals("/shutdown")){
                 System.out.println("OrderService: Shutting down all services");
                 signalInternalServices("shutdown");
-                sendResponse(exchange, 200, "{\"status\": \"Shutting down\"}".getBytes());
+                debugOrSend(exchange, 200, "{\"status\": \"Shutting down\"}".getBytes());
                 new Thread(() -> {
                     try { Thread.sleep(500); System.exit(0); }
                     catch (Exception ignored) {}
@@ -231,7 +253,7 @@ public class OrderHandler implements HttpHandler {
 
             String cached = orderCache.get(orderId);
             if (cached != null){
-                sendResponse(exchange, 200, cached.getBytes());
+                debugOrSend(exchange, 200, cached.getBytes());
                 return;
             }
 
@@ -239,7 +261,7 @@ public class OrderHandler implements HttpHandler {
             if(order != null){
                 String json1 = order.toJson();
                 orderCache.put(orderId, json1);
-                sendResponse(exchange, 200, order.toJson().getBytes());
+                debugOrSend(exchange, 200, order.toJson().getBytes());
             }else{
                 sendError(exchange, 404, "{}");
             }
@@ -293,7 +315,7 @@ public class OrderHandler implements HttpHandler {
                 boolean success = DatabaseManager.cancelOrder(orderId, order.getProduct_id(), restoredStock);
                 if(success){
                     orderCache.invalidate(orderId);
-                    sendResponse(exchange, 200, "{\"status\": \"Order cancelled and stock restored\"}".getBytes());
+                    debugOrSend(exchange, 200, "{\"status\": \"Order cancelled and stock restored\"}".getBytes());
                     return;
                 }else {
                     sendError(exchange, 500, "Database Transaction Failed");
@@ -381,7 +403,7 @@ public class OrderHandler implements HttpHandler {
                 String successJson = String.format(
                         "{\"product_id\": %s, \"user_id\": %s, \"quantity\": %d, \"status\": \"Success\"}",
                         productId, userId, quantity);
-                sendResponse(exchange, 200, successJson.getBytes(StandardCharsets.UTF_8));
+                debugOrSend(exchange, 200, successJson.getBytes(StandardCharsets.UTF_8));
             } else {
                 sendError(exchange, 500, "Database Transaction Failed");
             }
@@ -419,7 +441,7 @@ public class OrderHandler implements HttpHandler {
         client.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofByteArray())
                 .thenAccept(res -> {
                     try {
-                        sendResponse(exchange, res.statusCode(), res.body());
+                        debugOrSend(exchange, res.statusCode(), res.body());
                     } catch (IOException e) {
                         // Connection likely closed by client
                     }
@@ -462,7 +484,7 @@ public class OrderHandler implements HttpHandler {
      */
     private void sendError(HttpExchange exchange, int code, String message) throws IOException {
         String json = String.format("{\"status\": \"%s\"}\n", message);
-        sendResponse(exchange, code, json.getBytes());
+        debugOrSend(exchange, code, json.getBytes());
     }
 
     /**
@@ -524,7 +546,7 @@ public class OrderHandler implements HttpHandler {
             // Aggregate purchases
             Map<Integer, Integer> purchases = DatabaseManager.getUserPurchases(userId);
             String jsonResponse = mapToJson(purchases);
-            sendResponse(exchange, 200, jsonResponse.getBytes(StandardCharsets.UTF_8));
+            debugOrSend(exchange, 200, jsonResponse.getBytes(StandardCharsets.UTF_8));
         }catch (NumberFormatException e){
             sendError(exchange, 400, "Invalid ID format");
         }catch (Exception e){

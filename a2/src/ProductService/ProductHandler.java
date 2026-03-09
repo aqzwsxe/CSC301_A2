@@ -19,7 +19,24 @@ public class ProductHandler implements HttpHandler {
     String errorResponse = "{}\n";
 
     private static final CacheManager<Integer, String> productCache = new CacheManager<>();
+    // 1. ADD THE DEBUG TOGGLE
+    private static final boolean DEBUG_MODE = true;
 
+    // 2. ADD THE HELPER METHOD
+    private void debugOrSend(HttpExchange exchange, int status, String message) throws IOException {
+        if (DEBUG_MODE) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("{\n");
+            // Defensive quote escaping for JSON-in-JSON
+            sb.append("  \"debug_msg\": \"").append(message.replace("\"", "\\\"")).append("\",\n");
+            sb.append("  \"method\": \"").append(exchange.getRequestMethod()).append("\",\n");
+            sb.append("  \"path\": \"").append(exchange.getRequestURI().getPath()).append("\"\n");
+            sb.append("}");
+            sendResponse(exchange, status, sb.toString());
+        } else {
+            sendResponse(exchange, status, message);
+        }
+    }
 
     /**
      * Routes requests based on HTTP method.
@@ -47,7 +64,7 @@ public class ProductHandler implements HttpHandler {
                 handlePost(exchange);
             }
         } catch (Exception e){
-            sendResponse(exchange, 400, errorResponse);
+            debugOrSend(exchange, 400, errorResponse);
         }
     }
 
@@ -60,13 +77,13 @@ public class ProductHandler implements HttpHandler {
                 System.err.println("Failed to clear database: " + e.getMessage());
             }
         }else if(path.endsWith("/shutdown")){
-            sendResponse(exchange, 200, "{}\n");
+            debugOrSend(exchange, 200, "{}\n");
             new Thread(() -> {
                 try { Thread.sleep(200); System.exit(0); } catch (Exception ignored) {}
             }).start();
             return;
         }
-        sendResponse(exchange, 200, "{}\n");
+        debugOrSend(exchange, 200, "{}\n");
     }
 
     /**
@@ -86,8 +103,8 @@ public class ProductHandler implements HttpHandler {
     private void handleGet(HttpExchange exchange, String path) throws IOException {
         String[] parts = path.split("/");
         if(parts.length < 3){
-            // SendResponse
-            sendResponse(exchange, 400, errorResponse);
+            // debugOrSend
+            debugOrSend(exchange, 400, errorResponse);
             return;
         }
         String idStr = parts[parts.length - 1];
@@ -95,19 +112,19 @@ public class ProductHandler implements HttpHandler {
 
         int id;
         if (idStr == null) {
-            sendResponse(exchange, 400, errorResponse);
+            debugOrSend(exchange, 400, errorResponse);
             return;
         } else {
             try {
                 id = Integer.parseInt(idStr);
             } catch (NumberFormatException e) {
-                sendResponse(exchange,400, errorResponse);
+                debugOrSend(exchange,400, errorResponse);
                 return;
             }
         }
         String cacheProduct = productCache.get(id);
         if (cacheProduct != null){
-            sendResponse(exchange, 200, cacheProduct);
+            debugOrSend(exchange, 200, cacheProduct);
             return;
         }
 
@@ -117,11 +134,11 @@ public class ProductHandler implements HttpHandler {
 
         if(product != null){
             String jsonResponse = product.toJson();
-            sendResponse(exchange, 200, jsonResponse);
+            debugOrSend(exchange, 200, jsonResponse);
             productCache.put(id, jsonResponse);
         }
         else{
-            sendResponse(exchange,404, errorResponse);
+            debugOrSend(exchange,404, errorResponse);
         }
     }
     // bridge the gap between a raw HTTP request and the product data
@@ -148,20 +165,20 @@ public class ProductHandler implements HttpHandler {
             }
         }
         if(command == null){
-            sendResponse(exchange, 400, "{\"error\": \"No command found\"}");
+            debugOrSend(exchange, 400, "{\"error\": \"No command found\"}");
             return;
         }
 
         switch (command){
             case "clear":
                 DatabaseManager.clearAllData();
-                sendResponse(exchange, 200, "{}\n");
+                debugOrSend(exchange, 200, "{}\n");
                 return;
             case "restart":
-                sendResponse(exchange,200,"{}\n");
+                debugOrSend(exchange,200,"{}\n");
                 return;
             case "shutdown":
-                sendResponse(exchange, 200, "{}\n");
+                debugOrSend(exchange, 200, "{}\n");
                 new Thread(()->{
                     try {
                         Thread.sleep(200);
@@ -176,13 +193,13 @@ public class ProductHandler implements HttpHandler {
         String idStr = getJsonValue(body, "id");
         int id;
         if (idStr == null) {
-            sendResponse(exchange, 400, errorResponse);
+            debugOrSend(exchange, 400, errorResponse);
             return;
         } else {
             try {
                 id = Integer.parseInt(idStr);
             } catch (Exception e) {
-                sendResponse(exchange,400, errorResponse);
+                debugOrSend(exchange,400, errorResponse);
                 return;
             }
         }
@@ -200,7 +217,7 @@ public class ProductHandler implements HttpHandler {
                 handleDelete(exchange, id, body);
                 break;
             default:
-                sendResponse(exchange, 400, errorResponse);
+                debugOrSend(exchange, 400, errorResponse);
         }
     }
 
@@ -333,13 +350,13 @@ public class ProductHandler implements HttpHandler {
     public void handleCreate(HttpExchange exchange, int id, String body) throws IOException {
         // ID issues:
         if(DatabaseManager.getProductById(id)!=null){
-            sendResponse(exchange,409,errorResponse);
+            debugOrSend(exchange,409,errorResponse);
             return;
         }
         // if the json is an invalid json, some of the necessary parts are missing
         String nameValue = getJsonValue(body, "name");
         if (nameValue == null || nameValue.equals("invalid-info")) {
-            sendResponse(exchange, 400, errorResponse);
+            debugOrSend(exchange, 400, errorResponse);
             return;
         }
 
@@ -353,12 +370,12 @@ public class ProductHandler implements HttpHandler {
                 DatabaseManager.saveProduct(id,name,description,price,quantity);
                 Product newProduct = new Product(id, name, description, price, quantity);
 
-                sendResponse(exchange, 200, newProduct.toJson());
+                debugOrSend(exchange, 200, newProduct.toJson());
             } else {
-                sendResponse(exchange,400, errorResponse);
+                debugOrSend(exchange,400, errorResponse);
             }
         }catch (Exception e){
-            sendResponse(exchange,500,errorResponse);
+            debugOrSend(exchange,500,errorResponse);
         }
 
     }
@@ -381,7 +398,7 @@ public class ProductHandler implements HttpHandler {
     public  void handleUpdate(HttpExchange exchange, int id, String body) throws SQLException, IOException {
         Product product = DatabaseManager.getProductById(id);
         if(product == null){
-            sendResponse(exchange, 404, errorResponse);
+            debugOrSend(exchange, 404, errorResponse);
             return;
         }
         String name = getJsonValue(body, "name");
@@ -390,14 +407,14 @@ public class ProductHandler implements HttpHandler {
         String quantityStr = getJsonValue(body, "quantity");
 
         if (name == null && description == null && priceStr == null && quantityStr == null) {
-            sendResponse(exchange, 400, errorResponse);
+            debugOrSend(exchange, 400, errorResponse);
         }
 
         if (name != null) {
             if (!name.isEmpty()) {
                 product.setName(name);
             } else {
-                sendResponse(exchange, 400, errorResponse);
+                debugOrSend(exchange, 400, errorResponse);
                 return;
             }
         }
@@ -405,7 +422,7 @@ public class ProductHandler implements HttpHandler {
             if (!description.isEmpty()) {
                 product.setDescription(description);
             } else {
-                sendResponse(exchange, 400, errorResponse);
+                debugOrSend(exchange, 400, errorResponse);
                 return;
             }
         }
@@ -413,13 +430,13 @@ public class ProductHandler implements HttpHandler {
             try {
                 float price = Float.parseFloat(priceStr);
                 if (price < 0) {
-                    sendResponse(exchange, 400, errorResponse);
+                    debugOrSend(exchange, 400, errorResponse);
                     return;
                 } else {
                     product.setPrice(price);
                 }
             } catch (Exception e) {
-                sendResponse(exchange, 400, errorResponse);
+                debugOrSend(exchange, 400, errorResponse);
                 return;
             }
         }
@@ -429,17 +446,17 @@ public class ProductHandler implements HttpHandler {
                 if(quantity >= 0){
                     product.setQuantity(quantity);
                 }else{
-                    sendResponse(exchange, 400, errorResponse);
+                    debugOrSend(exchange, 400, errorResponse);
                     return;
                 }
             }catch (Exception e){
-                sendResponse(exchange, 400, errorResponse);
+                debugOrSend(exchange, 400, errorResponse);
                 return;
             }
         }
         DatabaseManager.updateProduct(product.getPid(),product.getName(),product.getDescription(),product.getPrice(),product.getQuantity());
         productCache.invalidate(id);
-        sendResponse(exchange, 200, product.toJson());
+        debugOrSend(exchange, 200, product.toJson());
         return;
     }
 
@@ -463,7 +480,7 @@ public class ProductHandler implements HttpHandler {
         try {
             Product product = DatabaseManager.getProductById(id);
             if(product == null){
-                sendResponse(exchange, 404, errorResponse);
+                debugOrSend(exchange, 404, errorResponse);
                 return;
             }
 
@@ -471,13 +488,13 @@ public class ProductHandler implements HttpHandler {
 
             // Check if name is missing (null) OR the explicit "invalid-info" signal
             if (nameValue == null || nameValue.equals("invalid-info")) {
-                sendResponse(exchange, 400, errorResponse);
+                debugOrSend(exchange, 400, errorResponse);
                 return;
             }
 
             // check if this is an invalid json file
             if(getJsonValue(body, "name").equals("invalid-info")) {
-                sendResponse(exchange, 400, errorResponse);
+                debugOrSend(exchange, 400, errorResponse);
                 return;
             }
 
@@ -491,12 +508,12 @@ public class ProductHandler implements HttpHandler {
                         product.getQuantity() == quantity) { // && product.getDescription().equals(description)
                         DatabaseManager.deleteProduct(id, name,price,quantity);
                         productCache.invalidate(id);
-                    sendResponse(exchange, 200, "{}\n");
+                    debugOrSend(exchange, 200, "{}\n");
                 } else {
-                    sendResponse(exchange,404, errorResponse);
+                    debugOrSend(exchange,404, errorResponse);
                 }
             } else {
-                sendResponse(exchange,400, errorResponse);
+                debugOrSend(exchange,400, errorResponse);
             }
 
         } catch (IOException e) {
