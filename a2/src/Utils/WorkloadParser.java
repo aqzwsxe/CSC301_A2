@@ -262,7 +262,8 @@ public class WorkloadParser {
 
             client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                     .thenAccept(response -> {
-                        System.out.println("POST " + endpoint + " | Status: " + response.statusCode());
+                        System.out.println("DELETE " + endpoint + " | Status: " + response.statusCode());
+                        System.out.println("Data: " + response.body());
                     });
 //            System.out.println("DELETE " + endpoint + " | Status: " + response.statusCode());
 //            System.out.println("Data: " + response.body());
@@ -352,29 +353,27 @@ public class WorkloadParser {
      */
     public static void sendGetRequest(String endpoint) throws IOException, InterruptedException, URISyntaxException {
         try {
-            // when the code executes
-            // 1: WorkloadParser (client) sends the Get request to the orderSErvice
-            // 2: OrderService: (Gateway) receives it and forwards it to the ISCS
-            // 3: ISCS (router) identifies the path (/user/2) and route it to the correct UserService instance
-            // 4: User service returns the json, which travels back through the ISCS and OrderService to the parser
-            //URI (the identifier): the general name for any string that identifies a resource
-            //URL (The name): A spacific type of URI that identifies a resource by a persistent unique name (like book's ISBN),
-            // even if its location changes
-            // Structure of URI
-            // 1: Scheme: http (specifies the protocol/method of access)
-            // 2: Authority: the IP address and port; For example, 127.0.0.1(IP):14000(port);
+            // 1. Construct the URL and the Request
             String fullUrl = (orderUrl + endpoint).replaceAll("\\s", "");
-            HttpRequest request1 = HttpRequest.newBuilder().
-                    uri(URI.create(fullUrl)).
-                    GET().build();
-            // Execution phase; HttpRequest defines what to do; this line actually does it
-            // client.send(): synchronous; the program pauses on this line until the order service
-            // response or the connection times out.
-            HttpResponse<String> response = client.send(request1, HttpResponse.BodyHandlers.ofString());
-            System.out.println("GET " + endpoint + " | Status: " + response.statusCode());
-            System.out.println("Data: " + response.body());
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(fullUrl))
+                    .GET()
+                    .build();
+
+            // 2. Use sendAsync to prevent blocking the main loop
+            client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenAccept(response -> {
+                        // 3. Log results once the server eventually responds
+                        System.out.println("GET " + endpoint + " | Status: " + response.statusCode());
+                        System.out.println("Data: " + response.body());
+                    })
+                    .exceptionally(e -> {
+                        System.err.println("GET Request failed: " + e.getMessage());
+                        return null;
+                    });
+
         } catch (Exception e) {
-            System.err.println("Error sending GET request: "+ e.getMessage());
+            System.err.println("Error initiating GET request: " + e.getMessage());
         }
     }
 
@@ -396,15 +395,16 @@ public class WorkloadParser {
         try {
             //System.out.println("run the sendPostRequest");
             String fullUrl = (orderUrl + endpoint).replaceAll("\\s", "");
-	    System.out.println("Send the request");
+//	    System.out.println("Send the request");
             HttpRequest request  = HttpRequest.newBuilder()
                     .uri(URI.create(fullUrl))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
-            System.out.println("After the HTTPRequest");
+//            System.out.println("After the HTTPRequest");
             client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                     .thenAccept(response -> {
                         System.out.println("POST " + endpoint + " | Status: " + response.statusCode());
+                        System.out.println("Data: " + response.body());
                     })
                     .exceptionally(e -> {
                         System.err.println("Request failed: " + e.getMessage());
