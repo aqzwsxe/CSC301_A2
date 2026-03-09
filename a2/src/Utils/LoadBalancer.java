@@ -13,7 +13,11 @@ import io.javalin.Javalin;
 
 // To run this loadBalancer: java -jar target/A2_Project-1.0-SNAPSHOT-jar-with-dependencies.jar
 public class LoadBalancer {
-    private static final List<String>  USER_PORTS = IntStream.rangeClosed(14001, 14007).mapToObj(String::valueOf).toList();
+    private static final String USER_SERVICE_IP = "142.1.46.9";    // pc06
+    private static final String PRODUCT_SERVICE_IP = "142.1.46.10"; // pc07
+    private static final String ORDER_SERVICE_IP = "142.1.46.12";   // pc09
+
+    private static final List<String> USER_PORTS = IntStream.rangeClosed(14001, 14007).mapToObj(String::valueOf).toList();
     private static final List<String> PRODUCT_PORTS = IntStream.rangeClosed(15001, 15007).mapToObj(String::valueOf).toList();
     private static final List<String> ORDER_PORTS = IntStream.rangeClosed(16001, 16007).mapToObj(String::valueOf).toList();
 
@@ -26,52 +30,45 @@ public class LoadBalancer {
             .build();
 
     public static void main(String[] args) {
-        // Start on 14000 as per ISCS config requirement
-        int lbPort = 17001;
+        int lbPort = 18001;
         Javalin app = Javalin.create().start("0.0.0.0", lbPort);
 
-        // --- USER SERVICE ROUTES ---
         app.post("/user", ctx -> {
             String port = USER_PORTS.get(userCounter.getAndIncrement() % USER_PORTS.size());
-            forwardRequest(ctx, "http://142.1.46.9:" + port + "/user");
+            forwardRequest(ctx, "http://" + USER_SERVICE_IP + ":" + port + "/user");
         });
         app.get("/user/{id}", ctx -> {
             String port = USER_PORTS.get(userCounter.getAndIncrement() % USER_PORTS.size());
-            forwardRequest(ctx, "http://142.1.46.9:" + port + "/user/" + ctx.pathParam("id"));
+            forwardRequest(ctx, "http://" + USER_SERVICE_IP + ":" + port + "/user/" + ctx.pathParam("id"));
         });
 
-        // --- PRODUCT SERVICE ROUTES ---
         app.post("/product", ctx -> {
             String port = PRODUCT_PORTS.get(productCounter.getAndIncrement() % PRODUCT_PORTS.size());
-            forwardRequest(ctx, "http://142.1.46.9:" + port + "/product");
+            forwardRequest(ctx, "http://" + PRODUCT_SERVICE_IP + ":" + port + "/product");
         });
         app.get("/product/{id}", ctx -> {
             String port = PRODUCT_PORTS.get(productCounter.getAndIncrement() % PRODUCT_PORTS.size());
-            forwardRequest(ctx, "http://142.1.46.9:" + port + "/product/" + ctx.pathParam("id"));
+            forwardRequest(ctx, "http://" + PRODUCT_SERVICE_IP + ":" + port + "/product/" + ctx.pathParam("id"));
         });
 
-        // --- ORDER SERVICE ROUTES ---
         app.post("/order", ctx -> {
             String port = ORDER_PORTS.get(orderCounter.getAndIncrement() % ORDER_PORTS.size());
-            forwardRequest(ctx, "http://142.1.46.9:" + port + "/order");
+            forwardRequest(ctx, "http://" + ORDER_SERVICE_IP + ":" + port + "/order");
         });
 
-        // NEW COMPONENT 1 ROUTE: Purchased Items
         app.get("/user/purchased/{id}", ctx -> {
             String port = ORDER_PORTS.get(orderCounter.getAndIncrement() % ORDER_PORTS.size());
-            forwardRequest(ctx, "http://142.1.46.9:" + port + "/user/purchased/" + ctx.pathParam("id"));
+            forwardRequest(ctx, "http://" + ORDER_SERVICE_IP + ":" + port + "/user/purchased/" + ctx.pathParam("id"));
         });
 
-        System.out.println("ISCS Load Balancer active on port " + lbPort);
+        System.out.println("External Load Balancer active on " + lbPort + " routing to distributed lab machines.");
     }
 
     private static void forwardRequest(io.javalin.http.Context ctx, String targetUrl) {
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(targetUrl));
+        HttpRequest.Builder builder = HttpRequest.newBuilder().uri(URI.create(targetUrl));
 
-        // Handle POST vs GET methods dynamically
         if (ctx.method().name().equals("POST")) {
-            builder.header("Content-Type", "application/json"); // Only for POST
+            builder.header("Content-Type", "application/json");
             builder.POST(HttpRequest.BodyPublishers.ofString(ctx.body()));
         } else {
             builder.GET();
@@ -84,7 +81,6 @@ public class LoadBalancer {
                             ctx.result(res.body());
                         })
                         .exceptionally(e -> {
-                            // Return a 502 Bad Gateway if the microservice is down
                             ctx.status(502).result("Downstream service error: " + e.getMessage());
                             return null;
                         })

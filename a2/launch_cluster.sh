@@ -1,12 +1,11 @@
 #!/bin/bash
-echo "--- Shutting down CSC301 Cluster ---"
+echo "--- Managing CSC301 Distributed Cluster ---"
 
-# 1. Improved Cleanup: Also look for port 17001 specifically
-pkill -9 -f "java.*(UserService|ProductService|OrderService|ISCS)"
-# Give the OS a moment to fully release the sockets
+# 1. Improved Cleanup: Added LoadBalancer to the list
+pkill -9 -f "java.*(UserService|ProductService|OrderService|ISCS|LoadBalancer)"
 sleep 1
 
-# Configuration
+# 2. Configuration
 PROJECT_ROOT=$(pwd)
 BIN_DIR="$PROJECT_ROOT/compiled"
 LIB_DIR="$PROJECT_ROOT/lib/*"
@@ -14,43 +13,50 @@ CONFIG_PATH="$PROJECT_ROOT/config.json"
 DB_CONFIG_PATH="$PROJECT_ROOT/dbConfig.json"
 CP_SEP=":"
 FULL_CP="$BIN_DIR${CP_SEP}$LIB_DIR${CP_SEP}."
+HOSTNAME=$(hostname)
 
+# 3. Helper Function (REQUIRED)
 start_service() {
     local className=$1
     local port=$2
     local index=$3
     echo "Starting $className (Instance $index) on port $port..."
-    nohup java -Xmx256m -XX:+UseZGC -cp "$FULL_CP" "$className" "$CONFIG_PATH" "$DB_CONFIG_PATH" "$index" > "log_$port.txt" 2>&1 &
+    # nohup runs it in the background so the script can finish
+    nohup java -Xmx256m -XX:+UseZGC -cp "$FULL_CP" "$className" "$CONFIG_PATH" "$DB_CONFIG_PATH" "$index" > "log_${HOSTNAME}_${port}.txt" 2>&1 &
 }
 
-echo "--- Launching CSC301 A2 Cluster (22 Instances) ---"
-
-for i in {0..6}; do
-    start_service "UserService.UserService" $((14001 + i)) $i
-done
-
-for i in {0..6}; do
-    start_service "ProductService.ProductService" $((15001 + i)) $i
-done
-
-for i in {0..6}; do
-    start_service "OrderService.OrderService" $((16001 + i)) $i
-done
-
-# 4. Start ISCS on 17001
-# IMPORTANT: Your Java code for ISCS must use index 0 to find 17001 in config.json
-start_service "ISCS.ISCS" 17001 0
+# 4. Host-Specific Logic
+case $HOSTNAME in
+  "Dh2026pc06")
+    echo "Host pc06: Starting UserServices..."
+    for i in {0..6}; do
+        start_service "UserService.UserService" $((14001 + i)) $i
+    done
+    ;;
+  "Dh2026pc07")
+    echo "Host pc07: Starting ProductServices..."
+    for i in {0..6}; do
+        start_service "ProductService.ProductService" $((15001 + i)) $i
+    done
+    ;;
+  "Dh2026pc09")
+    echo "Host pc09: Starting OrderServices..."
+    for i in {0..6}; do
+        start_service "OrderService.OrderService" $((16001 + i)) $i
+    done
+    ;;
+  "Dh2026pc10")
+    echo "Host pc10: Starting ISCS Bridge..."
+    start_service "ISCS.ISCS" 17001 0
+    ;;
+  "Dh2026pc11")
+    echo "Host pc11: Starting Load Balancer..."
+    start_service "LoadBalancer.LoadBalancer" 18001 0
+    ;;
+  *)
+    echo "WARNING: Unknown host ($HOSTNAME). No services started."
+    ;;
+esac
 
 echo "-----------------------------------------------"
-sleep 5 # Increased sleep to give the 22nd service time to finish its HealthCheck
-
-echo "--- Cluster Status ---"
-# Added 17001 to the grep pattern
-PORT_COUNT=$(netstat -tuln | grep -E '1400[1-7]|1500[1-7]|1600[1-7]|17001' | wc -l)
-
-echo "Total Active Ports: $PORT_COUNT / 22"
-if [ "$PORT_COUNT" -eq 22 ]; then
-    echo "READY: You can now run ./runme.sh -w <file>"
-else
-    echo "WARNING: Check log_17001.txt for DB connection errors."
-fi
+echo "Launch sequence complete for $HOSTNAME."

@@ -10,6 +10,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,8 +31,10 @@ public class ISCSHandler implements HttpHandler {
 
     private final List<String> userServicePool;
     private final List<String> productServicePool;
+    private final List<String> orderServicePool;
     private final AtomicInteger userCounter= new AtomicInteger(0);
     private final AtomicInteger productCounter = new AtomicInteger(0);
+
 
 
     /**
@@ -41,15 +44,16 @@ public class ISCSHandler implements HttpHandler {
      * @throws IOException If the configuration file cannot be read or parsed
      */
     public ISCSHandler(String configFile) throws IOException {
+        // Load all pools from config.json
         this.userServicePool = ConfigReader.getServicePool(configFile, "UserService");
         this.productServicePool = ConfigReader.getServicePool(configFile, "ProductService");
+        this.orderServicePool = ConfigReader.getServicePool(configFile, "OrderService");
 
         this.client = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1) // Often more stable for local microservices
-                .executor(Executors.newVirtualThreadPerTaskExecutor()) // If using Java 21
+                .version(HttpClient.Version.HTTP_1_1)
+                .executor(Executors.newVirtualThreadPerTaskExecutor())
+                .connectTimeout(Duration.ofSeconds(2))
                 .build();
-
-
     }
 
     private String getNextUserUrl(){
@@ -93,6 +97,7 @@ public class ISCSHandler implements HttpHandler {
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
         String targetBaseUrl;
+        String finalPath = path;
         if(path.endsWith("/shutdown") || path.endsWith("/restart") || path.endsWith("/clear")){
 //            System.out.println("Enter the check block");
             handleInternalSignal(exchange,path);
@@ -106,33 +111,34 @@ public class ISCSHandler implements HttpHandler {
             targetBaseUrl = getNextProductUrl();
         } else if (path.contains("/user/internal/")) {
             targetBaseUrl = getNextUserUrl();
+            finalPath = path.replace("/internal", "");
         }else if (path.contains("/product/internal/")) {
             targetBaseUrl = getNextProductUrl();
+            finalPath = path.replace("/internal", "");
         } else {
                 sendResponse(exchange, 404, "Unknown Service Path".getBytes());
                 return;
            }
-        URI targetUri = URI.create(targetBaseUrl + path);
+        URI targetUri = URI.create(targetBaseUrl + finalPath);
 
         System.out.println("[ISCS] Routing to: " + targetUri);
         try {
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder().uri(targetUri);
 
-            if(method.equalsIgnoreCase("POST")){
+            if (method.equalsIgnoreCase("POST")) {
                 byte[] body = exchange.getRequestBody().readAllBytes();
                 requestBuilder.POST(HttpRequest.BodyPublishers.ofByteArray(body));
                 requestBuilder.header("Content-Type", "application/json");
-            }else{
+            } else {
                 requestBuilder.GET();
             }
-            HttpRequest request = requestBuilder.build();
-            HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
-            sendResponse(exchange, response.statusCode(), response.body());
-        } catch (Exception e) {
 
-            byte[] error = "{}".getBytes();
-            sendResponse(exchange, 400, error);
-            throw new RuntimeException(e);
+            HttpResponse<byte[]> response = client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofByteArray());
+            sendResponse(exchange, response.statusCode(), response.body());
+
+        } catch (Exception e) {
+            System.err.println("[ISCS] Forwarding Error: " + e.getMessage());
+            sendResponse(exchange, 502, "{\"error\": \"Downstream Unavailable\"}".getBytes());
         }
     }
 
@@ -166,30 +172,34 @@ public class ISCSHandler implements HttpHandler {
 
     // Only for shutdown, restart and clear
     private void handleInternalSignal(HttpExchange exchange, String path) throws IOException {
-        System.out.println("Run the handleInternalSignal method");
-        String command = "";
-        if (path.contains("shutdown")) command = "shutdown";
-        else if (path.contains("restart")) command = "restart";
-        else if (path.contains("clear")) command = "clear";
+        String command = path.substring(path.lastIndexOf("/") + 1);
 
-        for (String url : userServicePool) {
-            forwardSignal(url + "/user/internal/" + command);
-        }
-        for (String url : productServicePool) {
-            forwardSignal(url + "/product/internal/" + command);
-        }
+        // Propagate to ALL services in the cluster
+        propagate(userServicePool, "/user/internal/" + command);
+        propagate(productServicePool, "/product/internal/" + command);
+        propagate(orderServicePool, "/order/internal/" + command);
 
-        System.out.println("[ISCS] Propagating " + command + " to all backends...");
-        sendResponse(exchange, 200, ("{\"status\": \"" + command + " processed\"}").getBytes());
+        System.out.println("[ISCS] Cluster-wide " + command + " initiated.");
+        sendResponse(exchange, 200, ("{\"status\": \"" + command + " initiated\"}").getBytes());
+
         if (command.equals("shutdown")) {
-            System.out.println("Enter the if statement; Shutdown the ISCS");
             new Thread(() -> {
                 try {
-                    Thread.sleep(1000); // Give enough time for the forward calls to finish
-                    System.out.println("[ISCS] Final Shutdown.");
+                    Thread.sleep(1500);
                     System.exit(0);
-                } catch (Exception ignored) {}
+                } catch (InterruptedException ignored) {}
             }).start();
+        }
+    }
+
+    private void propagate(List<String> pool, String subPath) {
+        for (String url : pool) {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(url + subPath))
+                    .timeout(Duration.ofMillis(800))
+                    .GET()
+                    .build();
+            client.sendAsync(req, HttpResponse.BodyHandlers.discarding());
         }
     }
 

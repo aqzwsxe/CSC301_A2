@@ -32,37 +32,29 @@ public class ISCS {
         int instanceIdx = (args.length > 2) ? Integer.parseInt(args[2]) : 0;
 
         // 1. Determine the URL
-        File dbFile = new File(dbConfig);
-        String url;
-        if(dbFile.exists()){
-            url = ConfigReader.getDbUrl(dbConfig);
-            System.out.println("Using DB URL from config: " + url);
-        } else {
-            url = "jdbc:postgresql://142.1.114.76:5432/mydb";
-            System.out.println("dbConfig not found. Defaulting to: " + url);
-        }
-
-        // 2. Initialize Database ONCE
         try {
-            DatabaseManager.setup(url);
-            if(!DatabaseManager.isDatabaseHealthy()){
-                System.err.println("ISCS: Database at " + url + " is unreachable.");
-                return;
+            String dbUrl = ConfigReader.getDbUrl(dbConfig);
+            DatabaseManager.setup(dbUrl);
+            if (DatabaseManager.isDatabaseHealthy()) {
+                System.out.println("ISCS: Verified DB connectivity at " + dbUrl);
             }
-            DatabaseManager.initializeTables();
-            System.out.println("ISCS: Database connection verified and tables initialized.");
         } catch (Exception e) {
-            System.err.println("ISCS: Critical failure during DB setup: " + e.getMessage());
-            return;
+            System.err.println("ISCS: DB Connectivity Warning: " + e.getMessage());
         }
 
-        // 3. Start Server
+        // 2. Start Server on pc10 (142.1.46.13)
         int port = ConfigReader.getPort(configFile, "InterServiceCommunication", instanceIdx);
+
+        // Binds to all interfaces so other lab machines can connect
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+
+        // The Handler must now perform dynamic routing based on config.json
         server.createContext("/", new ISCSHandler(configFile));
+
+        // Virtual threads are perfect for a high-traffic bridge
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
 
-        System.out.println("ISCS Service started on port " + port);
+        System.out.println("ISCS Internal Bridge started on port " + port + " (pc10)");
         server.start();
     }
 }

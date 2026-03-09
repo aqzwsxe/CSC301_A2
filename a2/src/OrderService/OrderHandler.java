@@ -267,7 +267,7 @@ public class OrderHandler implements HttpHandler {
                 return;
             }
             HttpResponse<String> prodRes = client.send(
-                    HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/product/" + order.getProduct_id())).GET().build(),
+                    HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/product/internal/" + order.getProduct_id())).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
             );
 
@@ -328,12 +328,12 @@ public class OrderHandler implements HttpHandler {
 
             // Fire both requests in parallel
             var userFuture = client.sendAsync(
-                    HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/user/" + userId)).GET().build(),
+                    HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/user/internal/" + userId)).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
             );
 
             var prodFuture = client.sendAsync(
-                    HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/product/" + productId)).GET().build(),
+                    HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/product/internal/" + productId)).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
             );
 
@@ -519,7 +519,7 @@ public class OrderHandler implements HttpHandler {
 
     private boolean userExists(String userId){
         try {
-            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/user/" + userId)).GET().build();
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/user/internal/" + userId)).GET().build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             return response.statusCode() == 200;
         } catch (IOException | InterruptedException e) {
