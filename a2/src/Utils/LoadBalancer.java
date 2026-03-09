@@ -27,39 +27,39 @@ public class LoadBalancer {
 
     public static void main(String[] args) {
         // Start on 14000 as per ISCS config requirement
-        int lbPort = 14000;
+        int lbPort = 17001;
         Javalin app = Javalin.create().start("0.0.0.0", lbPort);
 
         // --- USER SERVICE ROUTES ---
         app.post("/user", ctx -> {
             String port = USER_PORTS.get(userCounter.getAndIncrement() % USER_PORTS.size());
-            forwardRequest(ctx, "http://localhost:" + port + "/user");
+            forwardRequest(ctx, "http://142.1.46.9:" + port + "/user");
         });
         app.get("/user/{id}", ctx -> {
             String port = USER_PORTS.get(userCounter.getAndIncrement() % USER_PORTS.size());
-            forwardRequest(ctx, "http://localhost:" + port + "/user/" + ctx.pathParam("id"));
+            forwardRequest(ctx, "http://142.1.46.9:" + port + "/user/" + ctx.pathParam("id"));
         });
 
         // --- PRODUCT SERVICE ROUTES ---
         app.post("/product", ctx -> {
             String port = PRODUCT_PORTS.get(productCounter.getAndIncrement() % PRODUCT_PORTS.size());
-            forwardRequest(ctx, "http://localhost:" + port + "/product");
+            forwardRequest(ctx, "http://142.1.46.9:" + port + "/product");
         });
         app.get("/product/{id}", ctx -> {
             String port = PRODUCT_PORTS.get(productCounter.getAndIncrement() % PRODUCT_PORTS.size());
-            forwardRequest(ctx, "http://localhost:" + port + "/product/" + ctx.pathParam("id"));
+            forwardRequest(ctx, "http://142.1.46.9:" + port + "/product/" + ctx.pathParam("id"));
         });
 
         // --- ORDER SERVICE ROUTES ---
         app.post("/order", ctx -> {
             String port = ORDER_PORTS.get(orderCounter.getAndIncrement() % ORDER_PORTS.size());
-            forwardRequest(ctx, "http://localhost:" + port + "/order");
+            forwardRequest(ctx, "http://142.1.46.9:" + port + "/order");
         });
 
         // NEW COMPONENT 1 ROUTE: Purchased Items
         app.get("/user/purchased/{id}", ctx -> {
             String port = ORDER_PORTS.get(orderCounter.getAndIncrement() % ORDER_PORTS.size());
-            forwardRequest(ctx, "http://localhost:" + port + "/user/purchased/" + ctx.pathParam("id"));
+            forwardRequest(ctx, "http://142.1.46.9:" + port + "/user/purchased/" + ctx.pathParam("id"));
         });
 
         System.out.println("ISCS Load Balancer active on port " + lbPort);
@@ -67,22 +67,27 @@ public class LoadBalancer {
 
     private static void forwardRequest(io.javalin.http.Context ctx, String targetUrl) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(targetUrl))
-                .header("Content-Type", "application/json");
+                .uri(URI.create(targetUrl));
 
         // Handle POST vs GET methods dynamically
         if (ctx.method().name().equals("POST")) {
+            builder.header("Content-Type", "application/json"); // Only for POST
             builder.POST(HttpRequest.BodyPublishers.ofString(ctx.body()));
         } else {
             builder.GET();
         }
 
-        ctx.future(() -> httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString())
-                .thenAccept(res -> ctx.status(res.statusCode()).result(res.body()))
-                .exceptionally(e -> {
-                    ctx.status(502).result("Downstream service error: " + e.getMessage());
-                    return null;
-                })
+        ctx.future(() ->
+                httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString())
+                        .thenAccept(res -> {
+                            ctx.status(res.statusCode());
+                            ctx.result(res.body());
+                        })
+                        .exceptionally(e -> {
+                            // Return a 502 Bad Gateway if the microservice is down
+                            ctx.status(502).result("Downstream service error: " + e.getMessage());
+                            return null;
+                        })
         );
     }
 
