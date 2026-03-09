@@ -351,13 +351,13 @@ public class DatabaseManager {
 
     public static void initializeTables() throws SQLException {
         String userTable = "CREATE TABLE IF NOT EXISTS users (" +
-                "id SERIAL PRIMARY KEY, " +
+                "id INTEGER PRIMARY KEY, " +
                 "username VARCHAR(255) NOT NULL, " +
                 "email VARCHAR(255) NOT NULL, " +
                 "password VARCHAR(255) NOT NULL);";
 
         String productTable = "CREATE TABLE IF NOT EXISTS products (" +
-                "id SERIAL PRIMARY KEY, " +
+                "id INTEGER PRIMARY KEY, " +
                 "name VARCHAR(255) NOT NULL, " +
                 "description TEXT, " +
                 "price DECIMAL(10,2) NOT NULL, " +
