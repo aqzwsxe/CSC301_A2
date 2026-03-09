@@ -47,15 +47,18 @@ public class OrderHandler implements HttpHandler {
 
     private void debugExchange(HttpExchange exchange) throws IOException {
         StringBuilder sb = new StringBuilder();
+        sb.append("------------------------------");
+        sb.append("The request body");
         sb.append("{\n");
         sb.append("  \"method\": \"").append(exchange.getRequestMethod()).append("\",\n");
         sb.append("  \"path\": \"").append(exchange.getRequestURI().getPath()).append("\",\n");
         sb.append("  \"headers\": \"").append(exchange.getRequestHeaders().entrySet().toString()).append("\"\n");
         sb.append("}");
+        sb.append("------------------------------");
 
         byte[] debugBytes = sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
-        sendResponse(exchange, 200, debugBytes);
+        sendResponse(exchange, 1111111, debugBytes);
     }
 
     /**
