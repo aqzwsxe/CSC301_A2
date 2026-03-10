@@ -246,6 +246,7 @@ public class UserHandler implements HttpHandler {
 //        InputStream is = exchange.getRequestBody();
 //        String body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
 //        System.out.println("inside the handlePost: "+body);
+        System.out.println("ISCS RAW DATA: [" + body + "]");
         String path = exchange.getRequestURI().getPath();
         if (path.contains("/internal/")) {
             handleInternalSignal(exchange, path, requestBody);
