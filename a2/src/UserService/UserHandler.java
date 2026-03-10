@@ -205,7 +205,7 @@ public class UserHandler implements HttpHandler {
 //                return;
 //            }
 
-            String hashed_password = hash_helper(user.getPassword());
+            String hashed_password = user.getPassword();
             String res1 = String.format("{\n" +
                     "        \"id\": %d,\n" +
                     "        \"username\": \"%s\",\n" +
@@ -225,8 +225,6 @@ public class UserHandler implements HttpHandler {
         }catch (NumberFormatException e){
             debugOrSend(exchange, 400, "NumberFormatException".getBytes(), requestBody);
             return;
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
