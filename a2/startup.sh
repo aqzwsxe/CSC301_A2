@@ -14,7 +14,7 @@ machines=(
 
 for m in "${machines[@]}"; do
     echo "Launching on $m"
-    ssh $m "cd $DIR && ./launch_script.sh" &
+    ssh $m "cd $DIR && ./launch_cluster.sh" &
 done
 
 wait
