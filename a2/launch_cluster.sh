@@ -54,8 +54,9 @@ case $HOSTNAME in
     done
     ;;
   "dh2026pc10")
-    echo "Host pc10: Starting ISCS Bridge..."
-    start_service "ISCS.ISCS" 17001 0
+    for i in {0..3}; do
+        start_service "ISCS.ISCS" $((17001 + i)) $i
+    done
     ;;
   "dh2026pc11")
     echo "Host pc11: Starting Load Balancer..."

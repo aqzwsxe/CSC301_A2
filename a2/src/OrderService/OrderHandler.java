@@ -30,7 +30,9 @@ public class OrderHandler implements HttpHandler {
      * All requests that require data from the User or Product services are
      * forwarded to this address for routing
      */
-    private final String iscsUrl;
+    private final java.util.List<String> iscsUrls;
+    private final java.util.concurrent.atomic.AtomicInteger iscsCounter = new java.util.concurrent.atomic.AtomicInteger(0);
+//    private final String configFile; // Store this to reload if needed
     /**
      * The HTTP client used for backend.
      */
@@ -99,26 +101,37 @@ public class OrderHandler implements HttpHandler {
      * @throws IOException If the configuration file cannot be accessed or parsed
      */
     public OrderHandler(String configFile) throws IOException {
-        // 1. Get the IP and Port specifically from index 0 of the InterServiceCommunication array
-        // Since there is usually only 1 Load Balancer, we use index 0.
-        String rawIp = ConfigReader.getIp(configFile, "InterServiceCommunication");
-        int port = ConfigReader.getPort(configFile, "InterServiceCommunication", 0);
+        this.iscsUrls = new java.util.ArrayList<>();
 
-        // 2. Clean the IP: Remove quotes and ensure it is trimmed
-        String cleanIp = rawIp.replace("\"", "").trim();
+        for (int i = 0; i < 4; i++) {
+            try {
+                String rawIp = ConfigReader.getIp(configFile, "InterServiceCommunication");
+                int port = ConfigReader.getPort(configFile, "InterServiceCommunication", i);
 
-        // 3. Build the base URL
-        this.iscsUrl = "http://" + cleanIp + ":" + port;
+                String cleanIp = rawIp.replace("\"", "").trim();
+                this.iscsUrls.add("http://" + cleanIp + ":" + port);
+            } catch (Exception e) {
+                break;
+            }
+        }
 
-        // 4. Initialize the HttpClient with Virtual Threads
+        if (this.iscsUrls.isEmpty()) {
+            throw new IOException("No ISCS nodes found in configuration!");
+        }
+
         this.client = HttpClient.newBuilder()
                 .executor(Executors.newVirtualThreadPerTaskExecutor())
                 .connectTimeout(java.time.Duration.ofSeconds(2))
                 .build();
 
-        System.out.println("OrderHandler initialized. Talking to ISCS at: " + this.iscsUrl);
+        System.out.println("OrderHandler initialized with " + iscsUrls.size() + " ISCS nodes.");
     }
 
+
+    private String getNextIscsUrl(){
+        int index = Math.abs(iscsCounter.getAndIncrement() % iscsUrls.size());
+        return iscsUrls.get(index);
+    }
     /**
      * Main request dispatcher for the OrderService
      * This method intercepts all incoming HTTP traffic and routes it based on
@@ -316,7 +329,7 @@ public class OrderHandler implements HttpHandler {
                 return;
             }
             HttpResponse<String> prodRes = client.send(
-                    HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/product/internal/" + order.getProduct_id())).GET().build(),
+                    HttpRequest.newBuilder().uri(URI.create(getNextIscsUrl() + "/product/internal/" + order.getProduct_id())).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
             );
 
@@ -378,12 +391,12 @@ public class OrderHandler implements HttpHandler {
 
             // Fire both requests in parallel
             var userFuture = client.sendAsync(
-                    HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/user/internal/" + userId)).GET().build(),
+                    HttpRequest.newBuilder().uri(URI.create(getNextIscsUrl() + "/user/internal/" + userId)).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
             );
 
             var prodFuture = client.sendAsync(
-                    HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/product/internal/" + productId)).GET().build(),
+                    HttpRequest.newBuilder().uri(URI.create(getNextIscsUrl() + "/product/internal/" + productId)).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
             );
 
@@ -443,7 +456,7 @@ public class OrderHandler implements HttpHandler {
      * @throws InterruptedException If the forwarding process is interrupted
      */
     private void forwardToISCS(HttpExchange exchange, String method, String path, byte[] requestBody) throws IOException, InterruptedException {
-        HttpRequest.Builder builder = HttpRequest.newBuilder().uri(URI.create(iscsUrl+path));
+        HttpRequest.Builder builder = HttpRequest.newBuilder().uri(URI.create(getNextIscsUrl() + path));
         if(method.equalsIgnoreCase("POST")){
             builder.header("Content-Type", "application/json");
             builder.POST(HttpRequest.BodyPublishers.ofByteArray(requestBody));
@@ -571,7 +584,7 @@ public class OrderHandler implements HttpHandler {
 
     private boolean userExists(String userId){
         try {
-            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(iscsUrl + "/user/internal/" + userId)).GET().build();
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(getNextIscsUrl() + "/user/internal/" + userId)).GET().build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             return response.statusCode() == 200;
         } catch (IOException | InterruptedException e) {
@@ -590,7 +603,7 @@ public class OrderHandler implements HttpHandler {
             try {
                 // Don't necessarily need to wait for a complex response, just ensure the message is sent
                 HttpRequest request = HttpRequest.newBuilder().
-                        uri(URI.create(iscsUrl + route)).
+                        uri(URI.create(getNextIscsUrl() + route)).
                         POST(HttpRequest.BodyPublishers.noBody()).build();
                 client.send(request, HttpResponse.BodyHandlers.discarding());
                 System.out.println("Signaled " + route + " with command: " + command );
