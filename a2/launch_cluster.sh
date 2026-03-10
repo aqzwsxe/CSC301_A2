@@ -47,12 +47,25 @@ case $HOSTNAME in
         start_service "ProductService.ProductService" $((15001 + i)) $i
     done
     ;;
+  #The Order Service
   "dh2026pc09")
-    echo "Host pc09: Starting OrderServices..."
-    for i in {0..6}; do
-        start_service "OrderService.OrderService" $((16001 + i)) $i
-    done
+      echo "Host pc09 (142.1.46.12): Starting OrderServices 16001-16002..."
+      start_service "OrderService.OrderService" 16001 0
+      start_service "OrderService.OrderService" 16002 1
+      ;;
+  "dh2026pc12")
+      echo "Host pc12 (142.1.46.15): Starting OrderServices 16003-16004..."
+      start_service "OrderService.OrderService" 16003 2
+      start_service "OrderService.OrderService" 16004 3
+      ;;
+
+  "dh2026pc13")
+    echo "Host pc13 (142.1.46.16): Starting OrderServices 16005-16007..."
+    start_service "OrderService.OrderService" 16005 4
+    start_service "OrderService.OrderService" 16006 5
+    start_service "OrderService.OrderService" 16007 6
     ;;
+  # The Order Service
   "dh2026pc10")
     for i in {0..3}; do
         start_service "ISCS.ISCS" $((17001 + i)) $i
