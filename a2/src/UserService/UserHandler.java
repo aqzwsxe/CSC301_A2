@@ -332,37 +332,37 @@ public class UserHandler implements HttpHandler {
      * @return the value found or null if key not found
      */
     private String getJsonValue(String json, String key) {
-        // Find the key with quotes.
-        // don't include the colon in the pattern to be whitespace-safe.
         String keyPattern = "\"" + key + "\"";
         int keyIndex = json.indexOf(keyPattern);
         if (keyIndex == -1) return null;
 
-        // Find the colon after the key
         int colonIndex = json.indexOf(":", keyIndex + keyPattern.length());
         if (colonIndex == -1) return null;
 
-        // Find the end of the value (either a comma or the closing brace)
         int valueStart = colonIndex + 1;
-        int nextComma = json.indexOf(",", valueStart);
-        int nextBrace = json.indexOf("}", valueStart);
+        while (valueStart < json.length() && Character.isWhitespace(json.charAt(valueStart))) {
+            valueStart++;
+        }
+
+        if (valueStart >= json.length()) return null;
 
         int end;
-        if (nextComma != -1 && nextBrace != -1) {
-            end = Math.min(nextComma, nextBrace);
+        if (json.charAt(valueStart) == '\"') {
+            valueStart++;
+            end = json.indexOf("\"", valueStart);
+            if (end == -1) return null;
+            return json.substring(valueStart, end);
         } else {
-            end = (nextComma != -1) ? nextComma : nextBrace;
+            int nextComma = json.indexOf(",", valueStart);
+            int nextBrace = json.indexOf("}", valueStart);
+
+            if (nextComma != -1 && nextBrace != -1) end = Math.min(nextComma, nextBrace);
+            else if (nextComma != -1) end = nextComma;
+            else end = nextBrace;
+
+            if (end == -1) return null;
+            return json.substring(valueStart, end).trim();
         }
-
-        if (end == -1) return null;
-
-        // Extract, trim, and strip quotes
-        String value = json.substring(valueStart, end).trim();
-        if (value.startsWith("\"") && value.endsWith("\"")) {
-            value = value.substring(1, value.length() - 1);
-        }
-
-        return value;
     }
 
     /**
