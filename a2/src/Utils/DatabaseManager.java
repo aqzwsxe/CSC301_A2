@@ -14,14 +14,11 @@ public class DatabaseManager {
     private static Connection connection;
 
     private static synchronized Connection getConnection() throws SQLException{
-        if (connection == null || connection.isClosed()) {
-            Properties props = new Properties();
-            props.setProperty("user", "postgres");
-            props.setProperty("password", "password123");
-
-            connection = DriverManager.getConnection(dbUrl, props);
-        }
-        return connection;
+        Properties props = new Properties();
+        props.setProperty("user", "postgres");
+        props.setProperty("password", "password123");
+        // Do NOT store this in a static variable
+        return DriverManager.getConnection(dbUrl, props);
     }
 
     public static boolean isDatabaseHealthy(){
@@ -268,7 +265,12 @@ public class DatabaseManager {
             e.printStackTrace();
             return false;
         } finally {
-            if (conn != null) try { conn.setAutoCommit(true); } catch (SQLException e) { e.printStackTrace(); }
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                } catch (SQLException e) { e.printStackTrace(); }
+            }
         }
     }
 
@@ -306,7 +308,10 @@ public class DatabaseManager {
             return false;
         } finally {
             if (conn != null) {
-                try { conn.setAutoCommit(true); } catch (SQLException e) { e.printStackTrace(); }
+                try {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                } catch (SQLException e) { e.printStackTrace(); }
             }
         }
     }
@@ -372,7 +377,7 @@ public class DatabaseManager {
 
         String user_purchases = "CREATE TABLE IF NOT EXISTS user_purchases (\n" +
                 "    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,\n" +
-                "    product_id INTEGER,\n" +
+                "    product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,\n" +
                 "    quantity INTEGER,\n" +
                 "    PRIMARY KEY (user_id, product_id)\n" +
                 ");";

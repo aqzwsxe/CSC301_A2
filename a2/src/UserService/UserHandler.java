@@ -467,7 +467,7 @@ public class UserHandler implements HttpHandler {
      * @param body a JSON string containing the user id, username, email, password
      * @throws IOException if an I/O error occurs while sending the response
      */
-    public  void handleUpdate(HttpExchange exchange, int id, String body, byte[] requestBody) throws IOException, NoSuchAlgorithmException, SQLException {
+    public void handleUpdate(HttpExchange exchange, int id, String body, byte[] requestBody) throws IOException, NoSuchAlgorithmException, SQLException {
         User user = DatabaseManager.getUserById(id);
         if(user==null){
             debugOrSend(exchange, 404, "the user you try to update does not exist".getBytes(), requestBody);
@@ -504,9 +504,9 @@ public class UserHandler implements HttpHandler {
             user.setEmail(newEmail);
         }
         if(newPassword != null){
-            user.setPassword(newPassword);
+            String hashed = hash_helper(newPassword);
+            user.setPassword(hashed);
         }
-        String hashed_password = hash_helper(user.getPassword());
         DatabaseManager.updateUser(id, user.getUsername(), user.getEmail(), user.getPassword());
         userCache.invalidate(id);
         String res1 = String.format("{\n" +
@@ -514,7 +514,7 @@ public class UserHandler implements HttpHandler {
                 "        \"username\": \"%s\",\n" +
                 "        \"email\": \"%s\",\n" +
                 "        \"password\": \"%s\"\n" +
-                "    }", id, user.getUsername(), user.getEmail(), hashed_password);
+                "    }", id, user.getUsername(), user.getEmail(), user.getPassword());
         debugOrSend(exchange, 200, res1.getBytes(), requestBody);
         return;
     }
