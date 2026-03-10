@@ -7,11 +7,13 @@ sleep 1
 
 # 2. Configuration
 PROJECT_ROOT=$(pwd)
-BIN_DIR="$PROJECT_ROOT/compiled"
+# Update this line to point to the Maven output folder
+BIN_DIR="$PROJECT_ROOT/target/classes"
 LIB_DIR="$PROJECT_ROOT/lib/*"
 CONFIG_PATH="$PROJECT_ROOT/config.json"
 DB_CONFIG_PATH="$PROJECT_ROOT/dbConfig.json"
 CP_SEP=":"
+# This FULL_CP will now correctly find your code AND the new jar files
 FULL_CP="$BIN_DIR${CP_SEP}$LIB_DIR${CP_SEP}."
 HOSTNAME=$(hostname)
 
