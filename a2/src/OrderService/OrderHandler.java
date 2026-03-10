@@ -47,6 +47,10 @@ public class OrderHandler implements HttpHandler {
 
     private void debugOrSend(HttpExchange exchange, int status, byte[] message) throws IOException {
         if (DEBUG_MODE) {
+            System.out.println("-------------------------------------");
+            System.out.println("The DEBUG_MODE is: " + DEBUG_MODE);
+            System.out.println("Run if block of debugOrSend in OrderHandler");
+            System.out.println("-------------------------------------");
             // Convert the byte[] message to a String to include in the debug JSON
             String messageStr = new String(message, StandardCharsets.UTF_8);
 
@@ -61,6 +65,11 @@ public class OrderHandler implements HttpHandler {
             byte[] debugBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
             sendResponse(exchange, status, debugBytes);
         } else {
+            System.out.println("-------------------------------------");
+            System.out.println("The DEBUG_MODE is: " + DEBUG_MODE);
+            System.out.println("Run the else block of debugOrSend in OrderHandler");
+            System.out.println("-------------------------------------");
+
             // Send the raw byte array directly
             sendResponse(exchange, status, message);
         }
