@@ -101,19 +101,7 @@ public class OrderHandler implements HttpHandler {
      * @throws IOException If the configuration file cannot be accessed or parsed
      */
     public OrderHandler(String configFile) throws IOException {
-        this.iscsUrls = new java.util.ArrayList<>();
-
-        for (int i = 0; i < 4; i++) {
-            try {
-                String rawIp = ConfigReader.getIp(configFile, "InterServiceCommunication");
-                int port = ConfigReader.getPort(configFile, "InterServiceCommunication", i);
-
-                String cleanIp = rawIp.replace("\"", "").trim();
-                this.iscsUrls.add("http://" + cleanIp + ":" + port);
-            } catch (Exception e) {
-                break;
-            }
-        }
+        this.iscsUrls = ConfigReader.getServicePool(configFile, "InterServiceCommunication");
 
         if (this.iscsUrls.isEmpty()) {
             throw new IOException("No ISCS nodes found in configuration!");

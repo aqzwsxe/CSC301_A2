@@ -112,15 +112,21 @@ public class ConfigReader {
      * @return The IP address as a string
      * @throws IOException If the file cannot be read
      */
-    public static String getIp(String configFile, String serviceName) throws IOException {
+    public static String getIp(String configFile, String serviceName, int instanceIndex) throws IOException {
         String content = Files.readString(Paths.get(configFile));
-        // Find the start of the service block
-        int serviceIndex = content.indexOf("\""+serviceName+"\"");
-        if(serviceIndex==-1){
-            throw new RuntimeException("The service is not found");
-        }
-        int ipKeyIndex = content.indexOf("\"ip\"", serviceIndex);
+        int serviceIndex = content.indexOf("\"" + serviceName + "\"");
+        if (serviceIndex == -1) throw new RuntimeException("Service not found");
 
+        int arrayStart = content.indexOf("[", serviceIndex);
+
+        // Jump to the Nth '{' block
+        int currentPos = arrayStart;
+        for (int i = 0; i <= instanceIndex; i++) {
+            currentPos = content.indexOf("{", currentPos + 1);
+            if (currentPos == -1) return null; // Important for the while loop in getServiceCount
+        }
+
+        int ipKeyIndex = content.indexOf("\"ip\"", currentPos);
         int colonIndex = content.indexOf(":", ipKeyIndex);
         int firstQuote = content.indexOf("\"", colonIndex);
         int secondQuote = content.indexOf("\"", firstQuote + 1);
@@ -197,5 +203,23 @@ public class ConfigReader {
             e.printStackTrace();
         }
     }
+    public static int getServiceCount(String configFile, String serviceName) {
+        int count = 0;
+        while (true) {
+            try {
+                // Attempt to get the IP for index 'count'
+                String test = getIp(configFile, serviceName, count);
+                if (test == null || test.isEmpty()) {
+                    break;
+                }
+                count++;
+            } catch (Exception e) {
+                // Once we hit an index that doesn't exist, we've found the limit
+                break;
+            }
+        }
+        return count;
+    }
+
 }
 
