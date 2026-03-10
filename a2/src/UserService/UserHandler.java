@@ -24,7 +24,7 @@ import java.util.Map;
 public class UserHandler implements HttpHandler {
 
     private static final CacheManager<Integer, String> userCache = new CacheManager<>();
-    private static final boolean DEBUG_MODE = true;
+    private static final boolean DEBUG_MODE = false;
 
     private void debugOrSend(HttpExchange exchange, int status, byte[] responseMessage, byte[] originalRequest) throws IOException {
         if (DEBUG_MODE) {
@@ -407,6 +407,7 @@ public class UserHandler implements HttpHandler {
     public void handleCreate(HttpExchange exchange, int id, String body, byte[] requestBody) throws IOException, NoSuchAlgorithmException, SQLException {
         System.out.println("Start the handle create method");
         if(DatabaseManager.getUserById(id)!=null){
+            userCache.invalidate(id);
             System.out.println("User already exist");
             debugOrSend(exchange,409,"User already exist".getBytes(), requestBody);
             return;

@@ -20,7 +20,7 @@ public class ProductHandler implements HttpHandler {
 
     private static final CacheManager<Integer, String> productCache = new CacheManager<>();
     // 1. ADD THE DEBUG TOGGLE
-    private static final boolean DEBUG_MODE = true;
+    private static final boolean DEBUG_MODE = false;
 
     // 2. ADD THE HELPER METHOD
     private void debugOrSend(HttpExchange exchange, int status, byte[] responseMessage, byte[] originalRequest) throws IOException {
@@ -154,6 +154,7 @@ public class ProductHandler implements HttpHandler {
             productCache.put(id, jsonResponse);
         }
         else{
+            productCache.invalidate(id);
             debugOrSend(exchange,404, errorResponse.getBytes(), requestBody);
         }
     }
@@ -366,6 +367,7 @@ public class ProductHandler implements HttpHandler {
     public void handleCreate(HttpExchange exchange, int id, String body, byte[] requestBody) throws IOException {
         // ID issues:
         if(DatabaseManager.getProductById(id)!=null){
+            productCache.invalidate(id);
             debugOrSend(exchange, 409, errorResponse.getBytes(), requestBody);
             return;
         }
