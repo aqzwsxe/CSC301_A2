@@ -23,17 +23,18 @@ start_service() {
     local port=$2
     local id=$3
 
-    echo "Restarting $service_class on port $port (ID: $id)..."
+    echo "Restarting $service_class on port $port..."
 
-    # 1. Kill the specific process on this port
     fuser -k ${port}/tcp > /dev/null 2>&1 || true
     sleep 0.2
 
-    # 2. Start the service in the background
-    # We pass the port, config path, and ID as arguments to your Main method
-    nohup java -cp "$FULL_CP" "$service_class" "$port" "$CONFIG_PATH" "$id" > "logs_${port}.log" 2>&1 &
-
-    echo "Service $id started on $port."
+    # Verify the order matches your Java public static void main(String[] args)
+    # If your code needs DB_CONFIG, add it here:
+    nohup java -cp "$FULL_CP" "$service_class" \
+        "$port" \
+        "$CONFIG_PATH" \
+        "$DB_CONFIG_PATH" \
+        "$id" > "logs_${port}.log" 2>&1 &
 }
 
 # 4. Host-Specific Logic
