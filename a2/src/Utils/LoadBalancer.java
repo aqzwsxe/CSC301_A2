@@ -13,11 +13,7 @@ import io.javalin.Javalin;
 
 // To run this loadBalancer: java -jar target/A2_Project-1.0-SNAPSHOT-jar-with-dependencies.jar
 public class LoadBalancer {
-    private static final String ORDER_SERVICE_IP = "142.1.46.12";   // pc09
-
-    private static final List<String> ORDER_PORTS = IntStream.rangeClosed(16001, 16007).mapToObj(String::valueOf).toList();
-
-
+    private static List<String> orderServicePool;
     private static final AtomicInteger orderCounter = new AtomicInteger(0);
 
     private static final HttpClient httpClient = HttpClient.newBuilder()
@@ -25,10 +21,20 @@ public class LoadBalancer {
             .build();
 
     public static void main(String[] args) {
+        String configPath = (args.length > 0) ? args[0] : "config.json";
+
+        try {
+            // 3. Dynamically load the pool (IPs AND Ports correctly paired)
+            orderServicePool = ConfigReader.getServicePool(configPath, "OrderService");
+            System.out.println("Load Balancer initialized with " + orderServicePool.size() + " targets.");
+        } catch (Exception e) {
+            System.err.println("Failed to load OrderService pool: " + e.getMessage());
+            System.exit(1);
+        }
+
         int lbPort = 18001;
         Javalin app = Javalin.create().start("0.0.0.0", lbPort);
 
-        // Using "/*" ensures /user/1001 is caught correctly
         app.get("/*", ctx -> handleProxy(ctx));
         app.post("/*", ctx -> handleProxy(ctx));
         app.delete("/*", ctx -> handleProxy(ctx));
@@ -38,17 +44,16 @@ public class LoadBalancer {
     }
 
     private static void handleProxy(io.javalin.http.Context ctx) {
-        String port = ORDER_PORTS.get(orderCounter.getAndIncrement() % ORDER_PORTS.size());
-        String targetUrl = "http://" + ORDER_SERVICE_IP + ":" + port + ctx.path();
+        int index = Math.abs(orderCounter.getAndIncrement() % orderServicePool.size());
+        String targetBaseUrl = orderServicePool.get(index);
 
-        System.out.println("Forwarding " + ctx.method() + " " + ctx.path() + " -> Port " + port);
+        String targetUrl = targetBaseUrl + ctx.path().replaceAll("^/+", "/");
+        System.out.println("Forwarding " + ctx.method() + " " + ctx.path() + " -> " + targetUrl);
         forwardRequest(ctx, targetUrl);
     }
 
     private static void forwardRequest(io.javalin.http.Context ctx, String targetUrl) {
         HttpRequest.Builder builder = HttpRequest.newBuilder().uri(URI.create(targetUrl));
-
-        // Map the method and body correctly
         String method = ctx.method().name();
         if (method.equals("POST")) {
             builder.header("Content-Type", "application/json");
@@ -66,7 +71,7 @@ public class LoadBalancer {
                             ctx.result(res.body());
                         })
                         .exceptionally(e -> {
-                            ctx.status(502).result("Load Balancer Error: Cannot reach Order Service at " + targetUrl);
+                            ctx.status(502).result("Load Balancer Error: Cannot reach " + targetUrl);
                             return null;
                         })
         );
