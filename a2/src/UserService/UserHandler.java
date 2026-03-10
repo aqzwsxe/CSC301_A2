@@ -57,6 +57,7 @@ public class UserHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         byte[] requestBody = exchange.getRequestBody().readAllBytes();
+        String bodyString = new String(requestBody, StandardCharsets.UTF_8);
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
         System.out.println("[User] method: " + method);
@@ -74,7 +75,7 @@ public class UserHandler implements HttpHandler {
                 System.out.println("Try to call handle get");
                 handleGet(exchange,path,requestBody);
             } else if (method.equals("POST")) {
-                handlePost(exchange,path, requestBody);
+                handlePost(exchange,bodyString, requestBody);
             }
         }catch (Exception e){
             System.out.println(e.getMessage());
