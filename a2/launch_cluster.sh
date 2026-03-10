@@ -2,8 +2,8 @@
 echo "--- Managing CSC301 Distributed Cluster ---"
 
 # 1. Improved Cleanup: Added LoadBalancer to the list
-#pkill -9 -f "java.*(UserService|ProductService|OrderService|ISCS|LoadBalancer)"
-#sleep 1
+pkill -9 -f "java.*(UserService|ProductService|OrderService|ISCS|LoadBalancer)"
+sleep 1
 
 # 2. Configuration
 PROJECT_ROOT=$(pwd)
@@ -19,22 +19,18 @@ HOSTNAME=$(hostname)
 
 # 3. Helper Function (REQUIRED)
 start_service() {
-    local service_class=$1
+    local className=$1
     local port=$2
-    local id=$3
+    local index=$3
+    local jarPath="$PROJECT_ROOT/target/A2_Project-1.0-SNAPSHOT-jar-with-dependencies.jar"
 
-    echo "Restarting $service_class on port $port..."
+    echo "Launching $className on port $port..."
 
-    fuser -k ${port}/tcp > /dev/null 2>&1 || true
-    sleep 0.2
+    # We use the Fat JAR as the classpath.
+    # This includes all dependencies (Kotlin, Javalin, etc.)
+    nohup java -Xmx256m -XX:+UseZGC -cp "$jarPath" "$className" "$CONFIG_PATH" "$DB_CONFIG_PATH" "$index" > "log_${HOSTNAME}_${port}.txt" 2>&1 &
 
-    # Verify the order matches your Java public static void main(String[] args)
-    # If your code needs DB_CONFIG, add it here:
-    nohup java -cp "$FULL_CP" "$service_class" \
-        "$port" \
-        "$CONFIG_PATH" \
-        "$DB_CONFIG_PATH" \
-        "$id" > "logs_${port}.log" 2>&1 &
+    sleep 0.5 # Give it a moment to start
 }
 
 # 4. Host-Specific Logic
