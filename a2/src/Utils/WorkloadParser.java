@@ -57,7 +57,8 @@ public class WorkloadParser {
 
         // Use the NEW 3-argument version of getPort
         int port = ConfigReader.getPort(configPath, "LoadBalancer", 0);
-        String ip = ConfigReader.getIp(configPath, "LoadBalancer").replace("\"", "").trim();
+        // Adding '0' as the 3rd argument since there is only one LoadBalancer
+        String ip = ConfigReader.getIp(configPath, "LoadBalancer", 0).replace("\"", "").trim();
         balancerUrl = "http://" + ip + ":" + port;
         // This tell if the user just typed ./runme.sh -w
         // Ensure the decision logic only runs for line 1 of the workload file
