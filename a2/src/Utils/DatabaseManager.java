@@ -69,21 +69,17 @@ public class DatabaseManager {
     }
 
 
-    public static void saveOrder(int prodId, int userId, int qty, String status) throws SQLException{
-        String sql = "INSERT INTO orders (product_id, user_id, quantity, status) VALUES (?, ?, ?, ?)";
-        Thread.ofVirtual().start(() -> {
-            try (Connection conn = getConnection();
-                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
-                pstmt.setInt(1, prodId);
-                pstmt.setInt(2, userId);
-                pstmt.setInt(3, qty);
-                pstmt.setString(4, status);
-                pstmt.executeUpdate();
-            } catch (SQLException e) {
-                System.err.println("[DB Error] Failed to save order: " + e.getMessage());
-            }
-        });
-    }
+//    public static void saveOrder(int prodId, int userId, int qty, String status) throws SQLException{
+//        String sql = "INSERT INTO orders (product_id, user_id, quantity, status) VALUES (?, ?, ?, ?)";
+//        try (Connection conn = getConnection();
+//             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+//            pstmt.setInt(1, prodId);
+//            pstmt.setInt(2, userId);
+//            pstmt.setInt(3, qty);
+//            pstmt.setString(4, status);
+//            pstmt.executeUpdate();
+//        }
+//    }
 
 
     public static Order getOrderById(int orderId){
@@ -114,21 +110,21 @@ public class DatabaseManager {
 
 
 
-    public static  int  saveUser(String name, String email) throws SQLException{
-        String sql = "INSERT INTO users (username, email, password) VALUES (?, ?, 'default')";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, name);
-            pstmt.setString(2, email);
-
-            // executeUpdate returns the number of rows affected
-            int affectedRows = pstmt.executeUpdate();
-            return (affectedRows > 0) ? 1 : -1;
-        } catch (SQLException e) {
-            System.err.println("[DB Error] saveUser failed: " + e.getMessage());
-            return -1;
-        }
-    }
+//    public static  int  saveUser(String name, String email) throws SQLException{
+//        String sql = "INSERT INTO users (username, email, password) VALUES (?, ?, 'default')";
+//        try (Connection conn = getConnection();
+//             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+//            pstmt.setString(1, name);
+//            pstmt.setString(2, email);
+//
+//            // executeUpdate returns the number of rows affected
+//            int affectedRows = pstmt.executeUpdate();
+//            return (affectedRows > 0) ? 1 : -1;
+//        } catch (SQLException e) {
+//            System.err.println("[DB Error] saveUser failed: " + e.getMessage());
+//            return -1;
+//        }
+//    }
 
     public static  boolean saveProduct(int id, String name, String description, float price, int quantity){
         String sql = "INSERT INTO products (id, name, description, price, quantity) VALUES (?, ?, ?, ?, ?)";
@@ -402,7 +398,7 @@ public class DatabaseManager {
     }
 
 
-    public static int saveUserFull(int id, String username, String email, String password){
+    public static int saveUserFull(int id, String username, String email, String password) {
         String sql = "INSERT INTO users (id, username, email, password) VALUES (?, ?, ?, ?)";
 
         try (Connection conn = getConnection();
@@ -413,15 +409,43 @@ public class DatabaseManager {
             pstmt.setString(3, email);
             pstmt.setString(4, password);
 
-            return pstmt.executeUpdate();
+            pstmt.executeUpdate();
+            return 200; // Success: Created
+
         } catch (SQLException e) {
-            // If the ID already exists, PostgreSQL will throw a Unique Violation error.
+            // "23505" is the standard Postgres code for Unique Violation (Duplicate ID)
+            if ("23505".equals(e.getSQLState())) {
+                return 409; // Conflict
+            }
             System.err.println("[DB Error] Failed to save user " + id + ": " + e.getMessage());
-            return -1;
+            return 400; // General Bad Request
         }
     }
 
-    public static void updateUser(int id, String username, String email, String password) throws SQLException {
+    public static int deleteUserSecure(int id, String username, String email, String password) {
+        // Add username to the WHERE clause to be fully compliant
+        String sql = "DELETE FROM users WHERE id = ? AND username = ? AND email = ? AND password = ?";
+
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, id);
+            pstmt.setString(2, username);
+            pstmt.setString(3, email);
+            pstmt.setString(4, password);
+
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows == 0) {
+                // If the user ID exists but the delete failed, it means username/email/password was wrong
+                return (getUserById(id) == null) ? 404 : 401;
+            }
+            return 200;
+        } catch (SQLException e) {
+            System.err.println("[DB Error] Delete failed: " + e.getMessage());
+            return 500;
+        }
+    }
+
+    public static int updateUser(int id, String username, String email, String password) {
         String sql = "UPDATE users SET username = ?, email = ?, password = ? WHERE id = ?";
 
         try (Connection conn = getConnection();
@@ -433,12 +457,17 @@ public class DatabaseManager {
             pstmt.setInt(4, id);
 
             int affectedRows = pstmt.executeUpdate();
+
+            // If 0 rows were updated, the ID doesn't exist in the database
             if (affectedRows == 0) {
-                System.out.println("[DB Warning] Update user failed: User ID " + id + " not found.");
+                System.out.println("[DB Warning] Update failed: User ID " + id + " not found.");
+                return 404;
             }
+
+            return 200; // Success
         } catch (SQLException e) {
             System.err.println("[DB Error] Error updating user: " + e.getMessage());
-            throw e;
+            return 400; // Bad Request (e.g., data type mismatch)
         }
     }
 

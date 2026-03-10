@@ -535,39 +535,35 @@ public class UserHandler implements HttpHandler {
      * @throws IOException if an I/O error occurs while sending the response
      */
     public void handleDelete(HttpExchange exchange, int id, String body, byte[] requestBody) throws IOException, NoSuchAlgorithmException, SQLException {
-        User user = DatabaseManager.getUserById(id);
-        if(user==null){
-            debugOrSend(exchange,404, "user is null".getBytes(), requestBody);
-            return;
-        }
-
-
-        String reqUser = getJsonValue(body,"username");
+        // 1. Extract values from JSON
         String reqEmail = getJsonValue(body, "email");
         String reqPassword = getJsonValue(body, "password");
+        String reqUsername = getJsonValue(body, "username");
 
-        if(reqUser == null || reqEmail == null || reqPassword == null ||
-                reqUser.equals("invalid-info") || reqEmail.equals("invalid-info") || reqPassword.equals("invalid-info")){
-            debugOrSend(exchange, 400, "user/email/password is null/invlid".getBytes(), requestBody);
+        // 2. Validate format (400 Bad Request)
+        if (reqEmail == null || reqPassword == null || reqUsername == null ||
+                reqEmail.equals("invalid-info") || reqPassword.equals("invalid-info")) {
+            debugOrSend(exchange, 400, "Missing or invalid fields".getBytes(), requestBody);
             return;
         }
-        String hashedStored = hash_helper(user.getPassword());
+
+        // 3. Hash the incoming password ONLY
         String hashedIncoming = hash_helper(reqPassword);
 
-        boolean match = user.getUsername().equals(reqUser) &&
-                user.getEmail().equals(reqEmail) &&
-                hashedStored.equals(hashedIncoming);
+        // 4. Use the secure delete method
+        // This handles the 404 vs 401 logic internally in one DB trip
+        int resultStatus = DatabaseManager.deleteUserSecure(id, reqUsername, reqEmail, hashedIncoming);
 
-        if(match){
-            DatabaseManager.deleteUser(id);
+        if (resultStatus == 200) {
             userCache.invalidate(id);
             debugOrSend(exchange, 200, "Delete successfully".getBytes(), requestBody);
-            return;
-        } else{
-            debugOrSend(exchange, 404, "Cannot find a matched user".getBytes(), requestBody);
-            return;
+        } else if (resultStatus == 401) {
+            // ID exists but email/password didn't match
+            debugOrSend(exchange, 401, "Unauthorized: Credentials mismatch".getBytes(), requestBody);
+        } else {
+            // resultStatus is 404
+            debugOrSend(exchange, 404, "User not found".getBytes(), requestBody);
         }
-
     }
 
 
