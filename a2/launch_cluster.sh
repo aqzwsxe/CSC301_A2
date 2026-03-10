@@ -7,14 +7,14 @@ sleep 1
 
 # 2. Configuration
 PROJECT_ROOT=$(pwd)
-# Update this line to point to the Maven output folder
-BIN_DIR="$PROJECT_ROOT/target/classes"
-LIB_DIR="$PROJECT_ROOT/lib/*"
+BIN_DIR="${PROJECT_ROOT}/target/classes"
+# Use a colon-separated list and ensure paths are absolute
+FULL_CP="${BIN_DIR}:${PROJECT_ROOT}/lib/*:."
 CONFIG_PATH="$PROJECT_ROOT/config.json"
 DB_CONFIG_PATH="$PROJECT_ROOT/dbConfig.json"
 CP_SEP=":"
 # This FULL_CP will now correctly find your code AND the new jar files
-FULL_CP="$BIN_DIR${CP_SEP}$LIB_DIR${CP_SEP}."
+FULL_CP="${BIN_DIR}:${PROJECT_ROOT}/lib/*:."
 HOSTNAME=$(hostname)
 
 # 3. Helper Function (REQUIRED)
@@ -22,9 +22,15 @@ start_service() {
     local className=$1
     local port=$2
     local index=$3
-    echo "Starting $className (Instance $index) on port $port..."
-    # nohup runs it in the background so the script can finish
-    nohup java -Xmx256m -XX:+UseZGC -cp "$FULL_CP" "$className" "$CONFIG_PATH" "$DB_CONFIG_PATH" "$index" > "log_${HOSTNAME}_${port}.txt" 2>&1 &
+    local jarPath="$PROJECT_ROOT/target/A2_Project-1.0-SNAPSHOT-jar-with-dependencies.jar"
+
+    echo "Launching $className on port $port..."
+
+    # We use the Fat JAR as the classpath.
+    # This includes all dependencies (Kotlin, Javalin, etc.)
+    nohup java -Xmx256m -XX:+UseZGC -cp "$jarPath" "$className" "$CONFIG_PATH" "$DB_CONFIG_PATH" "$index" > "log_${HOSTNAME}_${port}.txt" 2>&1 &
+
+    sleep 0.5 # Give it a moment to start
 }
 
 # 4. Host-Specific Logic
