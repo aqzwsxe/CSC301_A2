@@ -13,16 +13,11 @@ import io.javalin.Javalin;
 
 // To run this loadBalancer: java -jar target/A2_Project-1.0-SNAPSHOT-jar-with-dependencies.jar
 public class LoadBalancer {
-    private static final String USER_SERVICE_IP = "142.1.46.9";    // pc06
-    private static final String PRODUCT_SERVICE_IP = "142.1.46.10"; // pc07
     private static final String ORDER_SERVICE_IP = "142.1.46.12";   // pc09
 
-    private static final List<String> USER_PORTS = IntStream.rangeClosed(14001, 14007).mapToObj(String::valueOf).toList();
-    private static final List<String> PRODUCT_PORTS = IntStream.rangeClosed(15001, 15007).mapToObj(String::valueOf).toList();
     private static final List<String> ORDER_PORTS = IntStream.rangeClosed(16001, 16007).mapToObj(String::valueOf).toList();
 
-    private static final AtomicInteger userCounter = new AtomicInteger(0);
-    private static final AtomicInteger productCounter = new AtomicInteger(0);
+
     private static final AtomicInteger orderCounter = new AtomicInteger(0);
 
     private static final HttpClient httpClient = HttpClient.newBuilder()
@@ -33,43 +28,33 @@ public class LoadBalancer {
         int lbPort = 18001;
         Javalin app = Javalin.create().start("0.0.0.0", lbPort);
 
-        app.post("/user", ctx -> {
-            String port = USER_PORTS.get(userCounter.getAndIncrement() % USER_PORTS.size());
-            forwardRequest(ctx, "http://" + USER_SERVICE_IP + ":" + port + "/user");
-        });
-        app.get("/user/{id}", ctx -> {
-            String port = USER_PORTS.get(userCounter.getAndIncrement() % USER_PORTS.size());
-            forwardRequest(ctx, "http://" + USER_SERVICE_IP + ":" + port + "/user/" + ctx.pathParam("id"));
-        });
+        // Using "/*" ensures /user/1001 is caught correctly
+        app.get("/*", ctx -> handleProxy(ctx));
+        app.post("/*", ctx -> handleProxy(ctx));
+        app.delete("/*", ctx -> handleProxy(ctx));
+        app.put("/*", ctx -> handleProxy(ctx));
 
-        app.post("/product", ctx -> {
-            String port = PRODUCT_PORTS.get(productCounter.getAndIncrement() % PRODUCT_PORTS.size());
-            forwardRequest(ctx, "http://" + PRODUCT_SERVICE_IP + ":" + port + "/product");
-        });
-        app.get("/product/{id}", ctx -> {
-            String port = PRODUCT_PORTS.get(productCounter.getAndIncrement() % PRODUCT_PORTS.size());
-            forwardRequest(ctx, "http://" + PRODUCT_SERVICE_IP + ":" + port + "/product/" + ctx.pathParam("id"));
-        });
+        System.out.println("Load Balancer active on " + lbPort);
+    }
 
-        app.post("/order", ctx -> {
-            String port = ORDER_PORTS.get(orderCounter.getAndIncrement() % ORDER_PORTS.size());
-            forwardRequest(ctx, "http://" + ORDER_SERVICE_IP + ":" + port + "/order");
-        });
+    private static void handleProxy(io.javalin.http.Context ctx) {
+        String port = ORDER_PORTS.get(orderCounter.getAndIncrement() % ORDER_PORTS.size());
+        String targetUrl = "http://" + ORDER_SERVICE_IP + ":" + port + ctx.path();
 
-        app.get("/user/purchased/{id}", ctx -> {
-            String port = ORDER_PORTS.get(orderCounter.getAndIncrement() % ORDER_PORTS.size());
-            forwardRequest(ctx, "http://" + ORDER_SERVICE_IP + ":" + port + "/user/purchased/" + ctx.pathParam("id"));
-        });
-
-        System.out.println("External Load Balancer active on " + lbPort + " routing to distributed lab machines.");
+        System.out.println("Forwarding " + ctx.method() + " " + ctx.path() + " -> Port " + port);
+        forwardRequest(ctx, targetUrl);
     }
 
     private static void forwardRequest(io.javalin.http.Context ctx, String targetUrl) {
         HttpRequest.Builder builder = HttpRequest.newBuilder().uri(URI.create(targetUrl));
 
-        if (ctx.method().name().equals("POST")) {
+        // Map the method and body correctly
+        String method = ctx.method().name();
+        if (method.equals("POST")) {
             builder.header("Content-Type", "application/json");
             builder.POST(HttpRequest.BodyPublishers.ofString(ctx.body()));
+        } else if (method.equals("DELETE")) {
+            builder.DELETE();
         } else {
             builder.GET();
         }
@@ -81,7 +66,7 @@ public class LoadBalancer {
                             ctx.result(res.body());
                         })
                         .exceptionally(e -> {
-                            ctx.status(502).result("Downstream service error: " + e.getMessage());
+                            ctx.status(502).result("Load Balancer Error: Cannot reach Order Service at " + targetUrl);
                             return null;
                         })
         );
