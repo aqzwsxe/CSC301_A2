@@ -43,7 +43,7 @@ public class OrderHandler implements HttpHandler {
      */
     private static AtomicBoolean isFirstRequest = new AtomicBoolean(true);
 
-    private static final boolean DEBUG_MODE = true;
+    private static final boolean DEBUG_MODE = false;
 
     private void debugOrSend(HttpExchange exchange, int status, byte[] message) throws IOException {
         if (DEBUG_MODE) {
