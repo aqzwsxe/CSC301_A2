@@ -26,7 +26,7 @@ public class WorkloadParser {
     /**
      * The base URL of the Order Service gateway, initialized from config.json
      */
-    private static String orderUrl;
+    private static String balancerUrl;
     /**
      * Shared HTTP client used to dispatch requests to the gateway
      */
@@ -56,9 +56,9 @@ public class WorkloadParser {
         int instanceIdx = (args.length > 2) ? Integer.parseInt(args[2]) : 0;
 
         // Use the NEW 3-argument version of getPort
-        int port = ConfigReader.getPort(configPath, "OrderService", instanceIdx);
-        String ip = ConfigReader.getIp(configPath, "OrderService").replace("\"", "").trim();;
-        orderUrl = "http://" + ip + ":" + port;
+        int port = ConfigReader.getPort(configPath, "LoadBalancer", 0);
+        String ip = ConfigReader.getIp(configPath, "LoadBalancer").replace("\"", "").trim();
+        balancerUrl = "http://" + ip + ":" + port;
         // This tell if the user just typed ./runme.sh -w
         // Ensure the decision logic only runs for line 1 of the workload file
         boolean firstRequestSent = false;
@@ -264,7 +264,7 @@ public class WorkloadParser {
      */
     public static void sendDeleteRequest(String endpoint){
         try {
-            String fullUrl = (orderUrl + endpoint).replaceAll("\\s", "");
+            String fullUrl = (balancerUrl + endpoint).replaceAll("\\s", "");
             HttpRequest request = HttpRequest.newBuilder().uri(URI.create(fullUrl))
                     .DELETE().build();
 
@@ -362,7 +362,7 @@ public class WorkloadParser {
     public static void sendGetRequest(String endpoint) throws IOException, InterruptedException, URISyntaxException {
         try {
             // 1. Construct the URL and the Request
-            String fullUrl = (orderUrl + endpoint).replaceAll("\\s", "");
+            String fullUrl = (balancerUrl + endpoint).replaceAll("\\s", "");
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(fullUrl))
                     .GET()
@@ -402,7 +402,7 @@ public class WorkloadParser {
     public static void sendPostRequest(String endpoint, String jsonBody){
         try {
             //System.out.println("run the sendPostRequest");
-            String fullUrl = (orderUrl + endpoint).replaceAll("\\s", "");
+            String fullUrl = (balancerUrl + endpoint).replaceAll("\\s", "");
 //	    System.out.println("Send the request");
             HttpRequest request  = HttpRequest.newBuilder()
                     .uri(URI.create(fullUrl))
