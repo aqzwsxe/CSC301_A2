@@ -51,7 +51,7 @@ case $HOSTNAME in
     ;;
   "dh2026pc11")
     echo "Host pc11: Starting Load Balancer..."
-    start_service "LoadBalancer.LoadBalancer" 18001 0
+    start_service "Utils.LoadBalancer" 18001 0
     ;;
   *)
     echo "WARNING: Unknown host ($HOSTNAME). No services started."
