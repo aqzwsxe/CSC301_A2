@@ -47,10 +47,10 @@ public class OrderHandler implements HttpHandler {
 
     private void debugOrSend(HttpExchange exchange, int status, byte[] message) throws IOException {
         if (DEBUG_MODE) {
-            System.out.println("-------------------------------------");
-            System.out.println("The DEBUG_MODE is: " + DEBUG_MODE);
-            System.out.println("Run if block of debugOrSend in OrderHandler");
-            System.out.println("-------------------------------------");
+            //System.out.println("-------------------------------------");
+            //System.out.println("The DEBUG_MODE is: " + DEBUG_MODE);
+            //System.out.println("Run if block of debugOrSend in OrderHandler");
+            //System.out.println("-------------------------------------");
             // Convert the byte[] message to a String to include in the debug JSON
             String messageStr = new String(message, StandardCharsets.UTF_8);
 
@@ -65,10 +65,10 @@ public class OrderHandler implements HttpHandler {
             byte[] debugBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
             sendResponse(exchange, status, debugBytes);
         } else {
-            System.out.println("-------------------------------------");
-            System.out.println("The DEBUG_MODE is: " + DEBUG_MODE);
-            System.out.println("Run the else block of debugOrSend in OrderHandler");
-            System.out.println("-------------------------------------");
+            //System.out.println("-------------------------------------");
+            //System.out.println("The DEBUG_MODE is: " + DEBUG_MODE);
+            //System.out.println("Run the else block of debugOrSend in OrderHandler");
+            //System.out.println("-------------------------------------");
 
             // Send the raw byte array directly
             sendResponse(exchange, status, message);
@@ -104,7 +104,7 @@ public class OrderHandler implements HttpHandler {
                 .connectTimeout(Duration.ofSeconds(2))
                 .build();
 
-        System.out.println("OrderHandler: Direct Routing Mode. Users: " + userServicePool.size() + " Products: " + productServicePool.size());
+        //System.out.println("OrderHandler: Direct Routing Mode. Users: " + userServicePool.size() + " Products: " + productServicePool.size());
     }
 
 
@@ -363,7 +363,7 @@ public class OrderHandler implements HttpHandler {
             int quantity = Integer.parseInt(quantityStr);
 
             // DIRECT CALLS to User and Product Services
-            System.out.println("Step 1: Starting Order Create");
+            //System.out.println("Step 1: Starting Order Create");
             var userFuture = client.sendAsync(
                     HttpRequest.newBuilder().uri(URI.create(getNextUrl(userServicePool, userCounter) + "/user/internal/" + userId)).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
@@ -374,11 +374,11 @@ public class OrderHandler implements HttpHandler {
                     HttpResponse.BodyHandlers.ofString()
             );
 
-            System.out.println("Step 2: Waiting for User/Product services...");
+            //System.out.println("Step 2: Waiting for User/Product services...");
             HttpResponse<String> userRes = userFuture.join();
-            System.out.println("Step 3: User Service responded with: " + userRes.statusCode());
+            //System.out.println("Step 3: User Service responded with: " + userRes.statusCode());
             HttpResponse<String> prodRes = prodFuture.join();
-            System.out.println("Step 4: Product Service responded with: " + prodRes.statusCode());
+            //System.out.println("Step 4: Product Service responded with: " + prodRes.statusCode());
 
             if (userRes.statusCode() == 404 || prodRes.statusCode() == 404) {
                 sendError(exchange, 404, "{}\n", requestBody);
@@ -387,7 +387,7 @@ public class OrderHandler implements HttpHandler {
             // 2. Extract and Validate the Quantity String
             String availStr = getJsonValue(prodRes.body(), "quantity");
             if (availStr == null) {
-                System.err.println("FAILED: Missing 'quantity' in Product Service response body: " + prodRes.body());
+                //System.err.println("FAILED: Missing 'quantity' in Product Service response body: " + prodRes.body());
                 sendError(exchange, 500, "Upstream Format Error", requestBody);
                 return;
             }
@@ -396,13 +396,13 @@ public class OrderHandler implements HttpHandler {
             try {
                 available = Integer.parseInt(availStr.trim());
             } catch (NumberFormatException e) {
-                System.err.println("FAILED: Could not parse quantity string: '" + availStr + "'");
+                //System.err.println("FAILED: Could not parse quantity string: '" + availStr + "'");
                 sendError(exchange, 500, "Upstream Data Error", requestBody);
                 return;
             }
             // 4. Business Logic: Stock Check
             if (quantity > available) {
-                System.out.println("DEBUG: Insufficient stock. Requested: " + quantity + ", Available: " + available);
+                //System.out.println("DEBUG: Insufficient stock. Requested: " + quantity + ", Available: " + available);
                 sendError(exchange, 400, "{}\n", requestBody);
                 return;
             }
@@ -420,7 +420,7 @@ public class OrderHandler implements HttpHandler {
                 sendError(exchange, 500, "Database Transaction Failed", requestBody);
             }
         } catch (Exception e) {
-            System.err.println("!!! PlaceOrder Logic Failed !!!");
+            //System.err.println("!!! PlaceOrder Logic Failed !!!");
             e.printStackTrace(); // This will tell you EXACTLY which line crashed
             sendError(exchange, 400, "{}\n", requestBody);        }
 
