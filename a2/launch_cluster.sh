@@ -2,7 +2,7 @@
 echo "--- Managing CSC301 Distributed Cluster ---"
 
 # 1. Improved Cleanup: Added LoadBalancer to the list
-pkill -9 -f "java.*(UserService|ProductService|OrderService|ISCS|LoadBalancer)"
+pkill -9 -f "java.*(UserService|ProductService|OrderService|LoadBalancer)"
 sleep 1
 
 # 2. Configuration

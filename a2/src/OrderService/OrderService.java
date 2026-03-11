@@ -54,7 +54,7 @@ public class OrderService {
 
             // Use backlog 1000 to prevent "Connection Refused" during bursts
             HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 1000);
-
+            System.out.println("Inside the main class of the OrderService; the config file is: " + configFile);
             server.createContext("/", new OrderHandler(configFile));
 
             // Virtual Threads: Essential for 4,000 req/s concurrency
