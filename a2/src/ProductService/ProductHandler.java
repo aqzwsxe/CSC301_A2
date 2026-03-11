@@ -84,22 +84,43 @@ public class ProductHandler implements HttpHandler {
         }
     }
 
-    private void handleInternalSignal(HttpExchange exchange, String path, byte[] responseBytes) throws IOException {
-        if(path.endsWith("/clear")){
+    private void handleInternalSignal(HttpExchange exchange, String path,  byte[] requestBody) throws IOException {
+        if (path.endsWith("/clear")) {
             try {
                 DatabaseManager.clearAllData();
                 productCache.clear();
+                debugOrSend(exchange, 200, "{}".getBytes(), requestBody);
             } catch (SQLException e) {
                 System.err.println("Failed to clear database: " + e.getMessage());
+                debugOrSend(exchange, 500, "{}".getBytes(), requestBody);
             }
-        }else if(path.endsWith("/shutdown")){
-            debugOrSend(exchange, 200, "{}\n".getBytes(), responseBytes);
+        } else if (path.endsWith("/shutdown")) {
+            debugOrSend(exchange, 200, "{}\n".getBytes(), requestBody);
             new Thread(() -> {
                 try { Thread.sleep(200); System.exit(0); } catch (Exception ignored) {}
             }).start();
-            return;
+        } else if (path.contains("/internal/")) {
+            try {
+                String[] parts = path.split("/");
+                int id = Integer.parseInt(parts[parts.length - 1]);
+                Product product = DatabaseManager.getProductById(id);
+
+                if (product != null) {
+                    // Must return "quantity" key for OrderService to read
+                    String json = String.format("{\"id\":%d, \"quantity\":%d}",
+                            product.getPid(), product.getQuantity());
+                    sendResponse(exchange, 200, json);
+                } else {
+                    sendResponse(exchange, 404, "{}");
+                }
+            } catch (Exception e) {
+                sendResponse(exchange, 400, "{}");
+            }
+        } else {
+            // Handle /restart or any other internal signals
+            debugOrSend(exchange, 200, "{}".getBytes(), requestBody);
         }
-        debugOrSend(exchange, 200, "{}\n".getBytes(), responseBytes);
+        // REMOVED the extra debugOrSend call that was here
     }
 
     /**
