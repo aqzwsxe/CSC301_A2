@@ -245,32 +245,34 @@ public class OrderHandler implements HttpHandler {
     private void handleGetOrder(HttpExchange exchange, String path, byte[] requestBody) throws IOException {
         String[] parts = path.split("/");
         if (parts.length < 3){
-            String s1 = new String(requestBody);
-            sendError(exchange,400, "{}\n", requestBody);
+            sendError(exchange, 400, "{}\n", requestBody);
             return;
         }
-        try {
-            int orderId = Integer.parseInt(parts[2]);
 
+        try {
+            // Use parts.length - 1 to get the ID from the end of the URL (/order/1)
+            int orderId = Integer.parseInt(parts[parts.length - 1]);
+
+            // 1. Check Cache
             String cached = orderCache.get(orderId);
             if (cached != null){
-                debugOrSend(exchange, 200, requestBody);
+                // Pass the CACHED string bytes as the response
+                debugOrSend(exchange, 200, cached.getBytes(StandardCharsets.UTF_8));
                 return;
             }
 
+            // 2. Check Database
             Order order = DatabaseManager.getOrderById(orderId);
-            if(order != null){
+            if (order != null) {
                 String json1 = order.toJson();
                 orderCache.put(orderId, json1);
-                debugOrSend(exchange, 200, requestBody);
-            }else{
-                String s1 = new String(requestBody);
+                // Pass the ORDER JSON bytes as the response
+                debugOrSend(exchange, 200, json1.getBytes(StandardCharsets.UTF_8));
+            } else {
                 sendError(exchange, 404, "{}\n", requestBody);
             }
-        }catch (NumberFormatException e){
-            String s1 = new String(requestBody);
+        } catch (NumberFormatException e) {
             sendError(exchange, 400, "{}\n", requestBody);
-            return;
         }
     }
 
