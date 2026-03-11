@@ -434,9 +434,19 @@ public class OrderHandler implements HttpHandler {
      * @throws IOException if an I/O error occurs while sending headers or writing the body
      */
     private void sendError(HttpExchange exchange, int code, String message, byte[] requestBody) throws IOException {
-        String json = String.format("{\"status\": \"%s\"}\n", message);
-        // Passing requestBody here allows debugOrSend to show what caused the error
-        debugOrSend(exchange, code, requestBody);
+        try {
+            String json = String.format("{\"status\": \"error\", \"message\": \"%s\"}\n", message);
+            byte[] response = json.getBytes(StandardCharsets.UTF_8);
+
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(code, response.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response);
+            }
+        } catch (IOException e) {
+            // If we fail here, just log it and stop. Do NOT call sendError again.
+            System.err.println("Fatal: Could not even send error response: " + e.getMessage());
+        }
     }
 
     /**

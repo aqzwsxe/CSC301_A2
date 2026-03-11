@@ -99,7 +99,26 @@ public class UserHandler implements HttpHandler {
             new Thread(() -> {
                 try { Thread.sleep(200); System.exit(0); } catch (Exception ignored) {}
             }).start();
-        }}
+        }else if (path.contains("/internal/")) {
+            // ADD THIS: Handle the lookup for OrderService
+            try {
+                String[] parts = path.split("/");
+                int id = Integer.parseInt(parts[parts.length - 1]);
+                User user = DatabaseManager.getUserById(id);
+
+                if (user != null) {
+                    // Return the user JSON so OrderService can continue
+                    String userJson = String.format("{\"id\":%d, \"username\":\"%s\"}", user.getId(), user.getUsername());
+                    sendResponse(exchange, 200, userJson);
+                } else {
+                    sendResponse(exchange, 404, "{}");
+                }
+            } catch (Exception e) {
+                sendResponse(exchange, 400, "{}");
+            }
+        }
+
+    }
     /**
      * Hash the input string using SHA256
      *
