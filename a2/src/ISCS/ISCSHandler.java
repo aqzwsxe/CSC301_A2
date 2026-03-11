@@ -121,7 +121,7 @@ public class ISCSHandler implements HttpHandler {
            }
         URI targetUri = URI.create(targetBaseUrl + finalPath);
 
-        System.out.println("[ISCS] Routing to: " + targetUri);
+        //System.out.println("[ISCS] Routing to: " + targetUri);
         try {
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder().uri(targetUri);
 
@@ -137,7 +137,7 @@ public class ISCSHandler implements HttpHandler {
             sendResponse(exchange, response.statusCode(), response.body());
 
         } catch (Exception e) {
-            System.err.println("[ISCS] Forwarding Error: " + e.getMessage());
+            //System.err.println("[ISCS] Forwarding Error: " + e.getMessage());
             sendResponse(exchange, 502, "{\"error\": \"Downstream Unavailable\"}".getBytes());
         }
     }
@@ -179,7 +179,7 @@ public class ISCSHandler implements HttpHandler {
         propagate(productServicePool, "/product/internal/" + command);
         propagate(orderServicePool, "/order/internal/" + command);
 
-        System.out.println("[ISCS] Cluster-wide " + command + " initiated.");
+        //System.out.println("[ISCS] Cluster-wide " + command + " initiated.");
         sendResponse(exchange, 200, ("{\"status\": \"" + command + " initiated\"}").getBytes());
 
         if (command.equals("shutdown")) {

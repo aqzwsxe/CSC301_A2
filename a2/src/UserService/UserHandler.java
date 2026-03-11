@@ -60,8 +60,8 @@ public class UserHandler implements HttpHandler {
         String bodyString = new String(requestBody, StandardCharsets.UTF_8);
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
-        System.out.println("[User] method: " + method);
-        System.out.println("[User] path: " + path);
+        //System.out.println("[User] method: " + method);
+        //System.out.println("[User] path: " + path);
         // There's no clear, shutdown and restart
         if (path.contains("/internal/") ||
                 path.equals("/clear") ||
@@ -72,7 +72,7 @@ public class UserHandler implements HttpHandler {
         }
         try {
             if(method.equals("GET")){
-                System.out.println("Try to call handle get");
+                //System.out.println("Try to call handle get");
                 handleGet(exchange,path,requestBody);
             } else if (method.equals("POST")) {
                 handlePost(exchange,bodyString, requestBody);
@@ -403,10 +403,10 @@ public class UserHandler implements HttpHandler {
      * @throws IOException if an I/O error occurs while sending the response
      */
     public void handleCreate(HttpExchange exchange, int id, String body, byte[] requestBody) throws IOException, NoSuchAlgorithmException, SQLException {
-        System.out.println("Start the handle create method");
+        //System.out.println("Start the handle create method");
         if(DatabaseManager.getUserById(id)!=null){
             userCache.invalidate(id);
-            System.out.println("User already exist");
+            //System.out.println("User already exist");
             debugOrSend(exchange,409,"User already exist".getBytes(), requestBody);
             return;
         }
@@ -421,12 +421,12 @@ public class UserHandler implements HttpHandler {
         if(username==null || username.isEmpty()||
                 email==null || email.isEmpty()||
                 password==null||password.isEmpty()){
-            System.out.println("sth is null");
+            //System.out.println("sth is null");
             debugOrSend(exchange,400, "username/email/password is wrong".getBytes(),requestBody);
             return;
         }
         if (!checkEmail(email)){
-            System.out.println("The email is invalid");
+            //System.out.println("The email is invalid");
             debugOrSend(exchange,400, "The Email is invalid".getBytes(), requestBody);
             return;
         }
@@ -445,7 +445,7 @@ public class UserHandler implements HttpHandler {
                     "        \"email\": \"%s\",\n" +
                     "        \"password\": \"%s\"\n" +
                     "    }", id, username, email, hashed_password);
-            System.out.println("successfully create the user");
+            //System.out.println("successfully create the user");
             debugOrSend(exchange, 200, res1.getBytes(),requestBody);
         }
 

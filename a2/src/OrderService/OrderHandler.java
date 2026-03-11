@@ -49,10 +49,10 @@ public class OrderHandler implements HttpHandler {
 
     private void debugOrSend(HttpExchange exchange, int status, byte[] message) throws IOException {
         if (DEBUG_MODE) {
-            System.out.println("-------------------------------------");
-            System.out.println("The DEBUG_MODE is: " + DEBUG_MODE);
-            System.out.println("Run if block of debugOrSend in OrderHandler");
-            System.out.println("-------------------------------------");
+            //System.out.println("-------------------------------------");
+            //System.out.println("The DEBUG_MODE is: " + DEBUG_MODE);
+            //System.out.println("Run if block of debugOrSend in OrderHandler");
+            //System.out.println("-------------------------------------");
             // Convert the byte[] message to a String to include in the debug JSON
             String messageStr = new String(message, StandardCharsets.UTF_8);
 
@@ -67,10 +67,10 @@ public class OrderHandler implements HttpHandler {
             byte[] debugBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
             sendResponse(exchange, status, debugBytes);
         } else {
-            System.out.println("-------------------------------------");
-            System.out.println("The DEBUG_MODE is: " + DEBUG_MODE);
-            System.out.println("Run the else block of debugOrSend in OrderHandler");
-            System.out.println("-------------------------------------");
+            //System.out.println("-------------------------------------");
+            //System.out.println("The DEBUG_MODE is: " + DEBUG_MODE);
+            //System.out.println("Run the else block of debugOrSend in OrderHandler");
+            //System.out.println("-------------------------------------");
 
             // Send the raw byte array directly
             sendResponse(exchange, status, message);
@@ -138,19 +138,19 @@ public class OrderHandler implements HttpHandler {
         String bodyString = new String(requestBody, StandardCharsets.UTF_8);
         String path = exchange.getRequestURI().getPath();
         String temp_path = path.toLowerCase();
-        System.out.println("The Order handle method: " );
-        System.out.println("method "+ method);
-        System.out.println("The bodyString: "+ bodyString);
+        //System.out.println("The Order handle method: " );
+        //System.out.println("method "+ method);
+        //System.out.println("The bodyString: "+ bodyString);
         try {
             if (isFirstRequest.getAndSet(false)){
                 if (temp_path.equals("/restart")){
                     // Keep the database
-                    System.out.println("OrderService: First is Restart. Persisting data.");
+                    //System.out.println("OrderService: First is Restart. Persisting data.");
                     signalInternalServices("restart");
                     debugOrSend(exchange, 200, requestBody);
                     return;
                 }else if(temp_path.equals("/clear")){
-                    System.out.println("OrderService: First request is " + path + ". Wiping DB.");
+                    //System.out.println("OrderService: First request is " + path + ". Wiping DB.");
                     DatabaseManager.clearAllData();
                     signalInternalServices("clear");
                     debugOrSend(exchange, 200, requestBody);
@@ -366,7 +366,7 @@ public class OrderHandler implements HttpHandler {
 
             if(userId==null || productId == null || quantityStr == null ||
                     userId.equals("invalid-info") || productId.equals("invalid-info") || quantityStr.equals("invalid-info")){
-                System.out.println("Enter the if statement; something is null");
+                //System.out.println("Enter the if statement; something is null");
                 sendError(exchange,400, "Invalid Request", requestBody);
                 return;
             }
@@ -594,9 +594,9 @@ public class OrderHandler implements HttpHandler {
                         uri(URI.create(getNextIscsUrl() + route)).
                         POST(HttpRequest.BodyPublishers.noBody()).build();
                 client.send(request, HttpResponse.BodyHandlers.discarding());
-                System.out.println("Signaled " + route + " with command: " + command );
+                //System.out.println("Signaled " + route + " with command: " + command );
             } catch (Exception e) {
-                System.err.println("Failed to signal " + route + ": " + e.getMessage());
+                //System.err.println("Failed to signal " + route + ": " + e.getMessage());
             }
         }
     }
