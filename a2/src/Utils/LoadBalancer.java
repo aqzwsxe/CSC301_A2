@@ -7,7 +7,6 @@ import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.IntStream;
 
 import io.javalin.Javalin;
 
@@ -17,10 +16,11 @@ public class LoadBalancer {
     private static final AtomicInteger orderCounter = new AtomicInteger(0);
 
     private static final HttpClient httpClient = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
             .executor(Executors.newVirtualThreadPerTaskExecutor())
             .build();
 
-    public static void main(String[] args) {
+    public static void main (String[] args) {
         String configPath = (args.length > 0) ? args[0] : "config.json";
 
         try {
@@ -33,7 +33,10 @@ public class LoadBalancer {
         }
 
         int lbPort = 18001;
-        Javalin app = Javalin.create().start("0.0.0.0", lbPort);
+        Javalin app = Javalin.create(config -> {
+            config.jetty.threadPool.maxThreads = 500;
+            config.jetty.threadPool.minThreads = 50;
+        }).start("0.0.0.0", lbPort);
 
         app.get("/*", ctx -> handleProxy(ctx));
         app.post("/*", ctx -> handleProxy(ctx));
@@ -54,14 +57,20 @@ public class LoadBalancer {
 
     private static void forwardRequest(io.javalin.http.Context ctx, String targetUrl) {
         HttpRequest.Builder builder = HttpRequest.newBuilder().uri(URI.create(targetUrl));
+
+        // Forward headers
+        ctx.headerMap().forEach(builder::header);
+
         String method = ctx.method().name();
-        if (method.equals("POST")) {
-            builder.header("Content-Type", "application/json");
-            builder.POST(HttpRequest.BodyPublishers.ofString(ctx.body()));
-        } else if (method.equals("DELETE")) {
-            builder.DELETE();
-        } else {
-            builder.GET();
+        switch (method) {
+            case "POST":
+                builder.POST(HttpRequest.BodyPublishers.ofString(ctx.body()));
+                break;
+            case "DELETE":
+                builder.DELETE();
+                break;
+            default:
+                builder.GET();
         }
 
         ctx.future(() ->
@@ -71,10 +80,9 @@ public class LoadBalancer {
                             ctx.result(res.body());
                         })
                         .exceptionally(e -> {
-                            ctx.status(502).result("Load Balancer Error: Cannot reach " + targetUrl);
+                            ctx.status(502).result("Service unavailable");
                             return null;
                         })
         );
     }
-
 }
