@@ -361,6 +361,7 @@ public class OrderHandler implements HttpHandler {
             int quantity = Integer.parseInt(quantityStr);
 
             // DIRECT CALLS to User and Product Services
+            System.out.println("Step 1: Starting Order Create");
             var userFuture = client.sendAsync(
                     HttpRequest.newBuilder().uri(URI.create(getNextUrl(userServicePool, userCounter) + "/user/internal/" + userId)).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
@@ -371,8 +372,11 @@ public class OrderHandler implements HttpHandler {
                     HttpResponse.BodyHandlers.ofString()
             );
 
+            System.out.println("Step 2: Waiting for User/Product services...");
             HttpResponse<String> userRes = userFuture.join();
+            System.out.println("Step 3: User Service responded with: " + userRes.statusCode());
             HttpResponse<String> prodRes = prodFuture.join();
+            System.out.println("Step 4: Product Service responded with: " + prodRes.statusCode());
 
             if (userRes.statusCode() == 404 || prodRes.statusCode() == 404) {
                 sendError(exchange, 404, "{}\n", requestBody);
