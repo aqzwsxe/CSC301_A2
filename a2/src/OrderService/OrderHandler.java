@@ -347,7 +347,7 @@ public class OrderHandler implements HttpHandler {
      * @param body a JSON string containing the product id, user id, and quantity
      * @throws IOException if an I/O error occurs while sending the response
      */
-    private  void  handlePlaceOrder(HttpExchange exchange, String body, byte[] requestBody) throws IOException, InterruptedException {
+    private void handlePlaceOrder(HttpExchange exchange, String body, byte[] requestBody) throws IOException, InterruptedException {
         try {
             String userId = getJsonValue(body, "user_id");
             String productId = getJsonValue(body, "product_id");
@@ -382,21 +382,45 @@ public class OrderHandler implements HttpHandler {
                 sendError(exchange, 404, "{}\n", requestBody);
                 return;
             }
-
-            int available = Integer.parseInt(getJsonValue(prodRes.body(), "quantity"));
+            // 2. Extract and Validate the Quantity String
+            String availStr = getJsonValue(prodRes.body(), "quantity");
+            if (availStr == null) {
+                System.err.println("FAILED: Missing 'quantity' in Product Service response body: " + prodRes.body());
+                sendError(exchange, 500, "Upstream Format Error", requestBody);
+                return;
+            }
+            // 3
+            int available;
+            try {
+                available = Integer.parseInt(availStr.trim());
+            } catch (NumberFormatException e) {
+                System.err.println("FAILED: Could not parse quantity string: '" + availStr + "'");
+                sendError(exchange, 500, "Upstream Data Error", requestBody);
+                return;
+            }
+            // 4. Business Logic: Stock Check
             if (quantity > available) {
+                System.out.println("DEBUG: Insufficient stock. Requested: " + quantity + ", Available: " + available);
                 sendError(exchange, 400, "{}\n", requestBody);
                 return;
             }
+            // 5. Database Persistence
+            boolean success = DatabaseManager.placeOrder(
+                    Integer.parseInt(productId),
+                    Integer.parseInt(userId),
+                    quantity,
+                    available - quantity
+            );
 
-            if (DatabaseManager.placeOrder(Integer.parseInt(productId), Integer.parseInt(userId), quantity, available - quantity)) {
+            if (success) {
                 debugOrSend(exchange, 200, requestBody);
             } else {
-                sendError(exchange, 500, "DB Error", requestBody);
+                sendError(exchange, 500, "Database Transaction Failed", requestBody);
             }
         } catch (Exception e) {
-            sendError(exchange, 400, "{}\n", requestBody);
-        }
+            System.err.println("!!! PlaceOrder Logic Failed !!!");
+            e.printStackTrace(); // This will tell you EXACTLY which line crashed
+            sendError(exchange, 400, "{}\n", requestBody);        }
 
     }
 
