@@ -6,21 +6,20 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 
 public class DBConfig {
-    public String url = "jdbc:sqlite:301A2.db"; // Default
 
 
 
-    public static DBConfig load1(){
-        DBConfig config1 = new DBConfig();
-        File file = new File("dbConfig.json");
-        if(file.exists()){
-            try {
-                String content = new String(Files.readAllBytes(Paths.get("dbConfig.json")));
-                String pasrseUrl = getDBJsonValue(content, "url");
-                if(pasrseUrl != null) {
-                    config1.url = pasrseUrl;
-                    System.out.println("The url: "+ pasrseUrl);
-                }
+//    public static DBConfig load1(){
+//        DBConfig config1 = new DBConfig();
+//        File file = new File("dbConfig.json");
+//        if(file.exists()){
+//            try {
+//                String content = new String(Files.readAllBytes(Paths.get("dbConfig.json")));
+//                String pasrseUrl = getDBJsonValue(content, "url");
+//                if(pasrseUrl != null) {
+//                    config1.url = pasrseUrl;
+//                    System.out.println("The url: "+ pasrseUrl);
+//                }
 
 //                String parsedUser = getDBJsonValue(content, "user");
 //                if(parsedUser != null) {
@@ -34,17 +33,17 @@ public class DBConfig {
 ////                    System.out.println("The password: "+ parsedPass);
 //                }
 
-                System.out.println("[DBConfig] Loaded custom configuration from dbConfig.json");
-
-            } catch (IOException e) {
-                System.err.println("[DBConfig] Error reading file, using lab defaults.");
-
-            }
-        }else{
-            System.out.println("[DBConfig] No dbConfig.json found. Using default lab credentials.");
-        }
-        return config1;
-    }
+//                System.out.println("[DBConfig] Loaded custom configuration from dbConfig.json");
+//
+//            } catch (IOException e) {
+//                System.err.println("[DBConfig] Error reading file, using lab defaults.");
+//
+//            }
+//        }else{
+//            System.out.println("[DBConfig] No dbConfig.json found. Using default lab credentials.");
+//        }
+//        return config1;
+//    }
 
     private static String getDBJsonValue(String json, String key){
         String pattern = "\"" + key + "\":";

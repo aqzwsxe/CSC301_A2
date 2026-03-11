@@ -254,6 +254,17 @@ public class DatabaseManager {
                 psInsert.executeUpdate();
             }
 
+            String purchaseSql = "INSERT INTO user_purchases (user_id, product_id, quantity) " +
+                    "VALUES (?, ?, ?) " +
+                    "ON CONFLICT (user_id, product_id) " +
+                    "DO UPDATE SET quantity = user_purchases.quantity + EXCLUDED.quantity";
+            try (PreparedStatement psPur = conn.prepareStatement(purchaseSql)) {
+                psPur.setInt(1, userId);
+                psPur.setInt(2, prodId);
+                psPur.setInt(3, qty);
+                psPur.executeUpdate();
+            }
+
             conn.commit();
             return true;
         } catch (SQLException e) {
@@ -274,11 +285,25 @@ public class DatabaseManager {
         Connection conn = null;
         try{
             conn = getConnection();
-            // 1. Disable auto-commit to start a transaction block
             conn.setAutoCommit(false);
 
+            // 1. Fetch the order details first to know the quantity and user
+            int qty = 0;
+            int userId = 0;
+            String findOrder = "SELECT user_id, quantity FROM orders WHERE id = ?";
+            try (PreparedStatement psFind = conn.prepareStatement(findOrder)) {
+                psFind.setInt(1, orderId);
+                try (ResultSet rs = psFind.executeQuery()) {
+                    if (rs.next()) {
+                        userId = rs.getInt("user_id");
+                        qty = rs.getInt("quantity");
+                    } else {
+                        return false; // Order not found
+                    }
+                }
+            }
 
-            // 2. Restore the stock in the products table
+            // 2. Restore the stock
             String updateStockSql = "UPDATE products SET quantity = ? WHERE id = ?";
             try (PreparedStatement psStock = conn.prepareStatement(updateStockSql)) {
                 psStock.setInt(1, restoredStock);
@@ -286,14 +311,23 @@ public class DatabaseManager {
                 psStock.executeUpdate();
             }
 
-            // 3. Mark the order as Cancelled
+            // 3. Update the purchase history (Subtract the quantity)
+            String subPurchaseSql = "UPDATE user_purchases SET quantity = quantity - ? " +
+                    "WHERE user_id = ? AND product_id = ?";
+            try (PreparedStatement psSub = conn.prepareStatement(subPurchaseSql)) {
+                psSub.setInt(1, qty);
+                psSub.setInt(2, userId);
+                psSub.setInt(3, prodId);
+                psSub.executeUpdate();
+            }
+
+            // 4. Mark the order as Cancelled
             String updateOrderSql = "UPDATE orders SET status = 'Cancelled' WHERE id = ?";
             try (PreparedStatement psOrder = conn.prepareStatement(updateOrderSql)) {
                 psOrder.setInt(1, orderId);
                 psOrder.executeUpdate();
             }
 
-            // 4. Commit both changes as a single unit
             conn.commit();
             return true;
         } catch (SQLException e) {

@@ -188,12 +188,7 @@ public class ConfigReader {
             System.out.println("UserService[0] port: " + firstUserPort + " (Expected: 14001)");
             System.out.println("UserService[6] port: " + lastUserPort + " (Expected: 14007)");
 
-            // --- TEST 3: ISCS Port (Legacy/Single Object) ---
-            // Since InterServiceCommunication is an array with one element in your config
-            int iscsPort = getPort(testFile, "InterServiceCommunication", 0);
-            System.out.println("\nISCS Port: " + iscsPort + " (Expected: 14000)");
 
-            System.out.println("\n=== All Tests Passed ===");
 
         } catch (IOException e) {
             System.err.println("CRITICAL: File not found at " + testFile);
