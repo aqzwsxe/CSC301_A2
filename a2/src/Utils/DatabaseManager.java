@@ -161,19 +161,22 @@ public class DatabaseManager {
         return null;
     }
 
-    public  static void deleteProduct(int id, String name, float price, int quantity){
-        String sql = "DELETE FROM products WHERE id = ? AND name = ? AND price = ? AND quantity = ?";
+    public static void deleteProduct(int id, String name, float price, int quantity) {
+        // Only filter by ID for the actual execution
+        String sql = "DELETE FROM products WHERE id = ?";
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, id);
-            pstmt.setString(2, name);
-            pstmt.setFloat(3, price);
-            pstmt.setInt(4, quantity);
-            pstmt.executeUpdate();
+
+            int rows = pstmt.executeUpdate();
+            if (rows == 0) {
+                System.out.println("[DB Warning] deleteProduct: No row found with ID " + id);
+            }
         } catch (SQLException e) {
             System.err.println("[DB Error] deleteProduct failed: " + e.getMessage());
         }
     }
+
     public static void updateProductQuantity(int productId, int newQuantity){
         String sql = "UPDATE products SET quantity = ? WHERE id = ?";
         try (Connection conn = getConnection();
