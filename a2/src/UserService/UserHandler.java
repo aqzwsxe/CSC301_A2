@@ -156,14 +156,14 @@ public class UserHandler implements HttpHandler {
         String[] parts = path.split("/");
         if(parts.length < 3){
             // debugOrSend
-            debugOrSend(exchange, 400, "Request path length is less than 3".getBytes(StandardCharsets.UTF_8), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(StandardCharsets.UTF_8), requestBody);
             return;
         }
         int id;
         try {
             id = Integer.parseInt(parts[parts.length - 1]);
         } catch (Exception e) {
-            debugOrSend(exchange, 400, "Invalid ID format".getBytes(StandardCharsets.UTF_8), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(StandardCharsets.UTF_8), requestBody);
             return;
         }
         try {
@@ -191,7 +191,7 @@ public class UserHandler implements HttpHandler {
 
             User user = DatabaseManager.getUserById(id);
             if (user == null) {
-                debugOrSend(exchange, 404, "The user does not exist".getBytes(), requestBody);
+                debugOrSend(exchange, 404, "{}\n".getBytes(), requestBody);
                 return; // Stop here! Don't try to get the password.
             }
 //            if(path.contains("/user/purchased/") && parts.length >= 4){
@@ -219,11 +219,11 @@ public class UserHandler implements HttpHandler {
                 return;
             }
             else{
-                debugOrSend(exchange,404, "the user does not exist".getBytes(), requestBody);
+                debugOrSend(exchange,404, "{}\n".getBytes(), requestBody);
                 return;
             }
         }catch (NumberFormatException e){
-            debugOrSend(exchange, 400, "NumberFormatException".getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -255,7 +255,7 @@ public class UserHandler implements HttpHandler {
         String idStr = getJsonValue(body, "id");
         // this part handles create and delete and update
         if(command == null){
-            debugOrSend(exchange, 400, "{\"error\": \"No command found\"}".getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         }
         switch (command){
@@ -281,7 +281,7 @@ public class UserHandler implements HttpHandler {
         }
 
         if(idStr == null || idStr.equals("invalid-info")){
-            debugOrSend(exchange, 400, "{}".getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         }
         int id = Integer.parseInt(idStr);
@@ -298,7 +298,7 @@ public class UserHandler implements HttpHandler {
                 handleDelete(exchange, id, body, requestBody);
                 break;
             default:
-                debugOrSend(exchange, 400, "{}".getBytes(), requestBody);
+                debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
                 return;
 
         }
@@ -319,7 +319,7 @@ public class UserHandler implements HttpHandler {
 
             debugOrSend(exchange, 200, "{}".getBytes(StandardCharsets.UTF_8), requestBody);
         } catch (Exception e) {
-            debugOrSend(exchange, 400, "Encounter an exception in handleInternalPurchaseUpdate".getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
         }
 
     }
@@ -407,13 +407,13 @@ public class UserHandler implements HttpHandler {
         if(DatabaseManager.getUserById(id)!=null){
             userCache.invalidate(id);
             System.out.println("User already exist");
-            debugOrSend(exchange,409,"User already exist".getBytes(), requestBody);
+            debugOrSend(exchange,409,"{}\n".getBytes(), requestBody);
             return;
         }
 
         String username = getJsonValue(body, "username");
         if(username == null || username.isEmpty()){
-            debugOrSend(exchange, 400, "The username is invalid".getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         }
         String email = getJsonValue(body, "email");
@@ -422,12 +422,12 @@ public class UserHandler implements HttpHandler {
                 email==null || email.isEmpty()||
                 password==null||password.isEmpty()){
             System.out.println("sth is null");
-            debugOrSend(exchange,400, "username/email/password is wrong".getBytes(),requestBody);
+            debugOrSend(exchange,400, "{}\n".getBytes(),requestBody);
             return;
         }
         if (!checkEmail(email)){
             System.out.println("The email is invalid");
-            debugOrSend(exchange,400, "The Email is invalid".getBytes(), requestBody);
+            debugOrSend(exchange,400, "{}\n".getBytes(), requestBody);
             return;
         }
 
@@ -437,7 +437,7 @@ public class UserHandler implements HttpHandler {
 
         if (result == -1) {
             // Use your helper to ensure the body is written and the stream is closed
-            debugOrSend(exchange, 409, "result == -1".getBytes(), requestBody);
+            debugOrSend(exchange, 409, "{}\n".getBytes(), requestBody);
         } else {
             String res1 = String.format("{\n" +
                     "        \"id\": %d,\n" +
@@ -469,7 +469,7 @@ public class UserHandler implements HttpHandler {
     public void handleUpdate(HttpExchange exchange, int id, String body, byte[] requestBody) throws IOException, NoSuchAlgorithmException, SQLException {
         User user = DatabaseManager.getUserById(id);
         if(user==null){
-            debugOrSend(exchange, 404, "the user you try to update does not exist".getBytes(), requestBody);
+            debugOrSend(exchange, 404, "{}\n".getBytes(), requestBody);
             return;
         }
 
@@ -480,19 +480,19 @@ public class UserHandler implements HttpHandler {
         // 1: if the email has an invalid type (the email does not have exact one @)
         // 2: newEmail if empty
         if (newEmail!=null && (newEmail.isEmpty() || !checkEmail(newEmail))) {
-            debugOrSend(exchange, 400, "email is null or empty".getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         }
 
         if(newPassword != null && newPassword.isEmpty()){
-            debugOrSend(exchange, 400, "Password is null or empty".getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         }
 
 
         // According to the instruction: only update the info that are exist
         if(newUsername != null && newUsername.isEmpty()){ // Add empty check
-            debugOrSend(exchange, 400, "username is null or username is empty".getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         }
         if(newUsername!=null){
@@ -542,7 +542,7 @@ public class UserHandler implements HttpHandler {
         // 2. Validate format (400 Bad Request)
         if (reqEmail == null || reqPassword == null || reqUsername == null ||
                 reqEmail.equals("invalid-info") || reqPassword.equals("invalid-info")) {
-            debugOrSend(exchange, 400, "Missing or invalid fields".getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         }
 
@@ -555,13 +555,13 @@ public class UserHandler implements HttpHandler {
 
         if (resultStatus == 200) {
             userCache.invalidate(id);
-            debugOrSend(exchange, 200, "Delete successfully".getBytes(), requestBody);
+            debugOrSend(exchange, 200, "{}\n".getBytes(), requestBody);
         } else if (resultStatus == 401) {
             // ID exists but email/password didn't match
-            debugOrSend(exchange, 401, "Unauthorized: Credentials mismatch".getBytes(), requestBody);
+            debugOrSend(exchange, 401, "{}\n".getBytes(), requestBody);
         } else {
             // resultStatus is 404
-            debugOrSend(exchange, 404, "User not found".getBytes(), requestBody);
+            debugOrSend(exchange, 404, "{}\n".getBytes(), requestBody);
         }
     }
 

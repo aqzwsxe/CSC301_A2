@@ -80,7 +80,7 @@ public class ProductHandler implements HttpHandler {
                 handlePost(exchange, bodyString, requestBody);
             }
         } catch (Exception e){
-            debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
         }
     }
 
@@ -120,7 +120,7 @@ public class ProductHandler implements HttpHandler {
         String[] parts = path.split("/");
         if(parts.length < 3){
             // debugOrSend
-            debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         }
         String idStr = parts[parts.length - 1];
@@ -128,13 +128,13 @@ public class ProductHandler implements HttpHandler {
 
         int id;
         if (idStr == null) {
-            debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         } else {
             try {
                 id = Integer.parseInt(idStr);
             } catch (NumberFormatException e) {
-                debugOrSend(exchange,400, errorResponse.getBytes(), requestBody);
+                debugOrSend(exchange,400, "{}\n".getBytes(), requestBody);
                 return;
             }
         }
@@ -155,7 +155,7 @@ public class ProductHandler implements HttpHandler {
         }
         else{
             productCache.invalidate(id);
-            debugOrSend(exchange,404, errorResponse.getBytes(), requestBody);
+            debugOrSend(exchange,404, "{}\n".getBytes(), requestBody);
         }
     }
     // bridge the gap between a raw HTTP request and the product data
@@ -210,13 +210,13 @@ public class ProductHandler implements HttpHandler {
         String idStr = getJsonValue(body, "id");
         int id;
         if (idStr == null) {
-            debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         } else {
             try {
                 id = Integer.parseInt(idStr);
             } catch (Exception e) {
-                debugOrSend(exchange,400, errorResponse.getBytes(), requestBody);
+                debugOrSend(exchange,400, "{}\n".getBytes(), requestBody);
                 return;
             }
         }
@@ -234,7 +234,7 @@ public class ProductHandler implements HttpHandler {
                 handleDelete(exchange, id, body, requestBody);
                 break;
             default:
-                debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+                debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
         }
     }
 
@@ -368,13 +368,13 @@ public class ProductHandler implements HttpHandler {
         // ID issues:
         if(DatabaseManager.getProductById(id)!=null){
             productCache.invalidate(id);
-            debugOrSend(exchange, 409, errorResponse.getBytes(), requestBody);
+            debugOrSend(exchange, 409, "{}\n".getBytes(), requestBody);
             return;
         }
         // if the json is an invalid json, some of the necessary parts are missing
         String nameValue = getJsonValue(body, "name");
         if (nameValue == null || nameValue.equals("invalid-info")) {
-            debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         }
 
@@ -390,10 +390,10 @@ public class ProductHandler implements HttpHandler {
 
                 debugOrSend(exchange, 200, newProduct.toJson().getBytes(), requestBody);
             } else {
-                debugOrSend(exchange,400, errorResponse.getBytes(), requestBody);
+                debugOrSend(exchange,400, "{}\n".getBytes(), requestBody);
             }
         }catch (Exception e){
-            debugOrSend(exchange,500,errorResponse.getBytes(), requestBody);
+            debugOrSend(exchange,500,"{}\n".getBytes(), requestBody);
         }
 
     }
@@ -416,7 +416,7 @@ public class ProductHandler implements HttpHandler {
     public  void handleUpdate(HttpExchange exchange, int id, String body, byte[] requestBody) throws SQLException, IOException {
         Product product = DatabaseManager.getProductById(id);
         if(product == null){
-            debugOrSend(exchange, 404, errorResponse.getBytes(), requestBody);
+            debugOrSend(exchange, 404, "{}\n".getBytes(), requestBody);
             return;
         }
         String name = getJsonValue(body, "name");
@@ -425,7 +425,7 @@ public class ProductHandler implements HttpHandler {
         String quantityStr = getJsonValue(body, "quantity");
 
         if (name == null && description == null && priceStr == null && quantityStr == null) {
-            debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         }
 
@@ -433,7 +433,7 @@ public class ProductHandler implements HttpHandler {
             if (!name.isEmpty()) {
                 product.setName(name);
             } else {
-                debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+                debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
                 return;
             }
         }
@@ -441,7 +441,7 @@ public class ProductHandler implements HttpHandler {
             if (!description.isEmpty()) {
                 product.setDescription(description);
             } else {
-                debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+                debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
                 return;
             }
         }
@@ -449,13 +449,13 @@ public class ProductHandler implements HttpHandler {
             try {
                 float price = Float.parseFloat(priceStr);
                 if (price < 0) {
-                    debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+                    debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
                     return;
                 } else {
                     product.setPrice(price);
                 }
             } catch (Exception e) {
-                debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+                debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
                 return;
             }
         }
@@ -465,11 +465,11 @@ public class ProductHandler implements HttpHandler {
                 if(quantity >= 0){
                     product.setQuantity(quantity);
                 }else{
-                    debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+                    debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
                     return;
                 }
             }catch (Exception e){
-                debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+                debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
                 return;
             }
         }
@@ -499,7 +499,7 @@ public class ProductHandler implements HttpHandler {
         try {
             Product product = DatabaseManager.getProductById(id);
             if(product == null){
-                debugOrSend(exchange, 404, errorResponse.getBytes(), requestBody);
+                debugOrSend(exchange, 404, "{}\n".getBytes(), requestBody);
                 return;
             }
 
@@ -507,13 +507,13 @@ public class ProductHandler implements HttpHandler {
 
             // Check if name is missing (null) OR the explicit "invalid-info" signal
             if (nameValue == null || nameValue.equals("invalid-info")) {
-                debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+                debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
                 return;
             }
 
             // check if this is an invalid json file
             if(getJsonValue(body, "name").equals("invalid-info")) {
-                debugOrSend(exchange, 400, errorResponse.getBytes(), requestBody);
+                debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
                 return;
             }
 
@@ -529,10 +529,10 @@ public class ProductHandler implements HttpHandler {
                         productCache.invalidate(id);
                     debugOrSend(exchange, 200, "{}\n".getBytes(), requestBody);
                 } else {
-                    debugOrSend(exchange,404, errorResponse.getBytes(), requestBody);
+                    debugOrSend(exchange,404, "{}\n".getBytes(), requestBody);
                 }
             } else {
-                debugOrSend(exchange,400, errorResponse.getBytes(), requestBody);
+                debugOrSend(exchange,400, "{}\n".getBytes(), requestBody);
             }
 
         } catch (IOException e) {
