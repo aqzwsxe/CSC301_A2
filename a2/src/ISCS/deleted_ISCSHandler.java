@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * It acts as a reverse proxy that receives HTTP requests from clients and forwards them to the appropriate backend
  * microservice (user or product) based on the URL path
  */
-public class ISCSHandler implements HttpHandler {
+public class deleted_ISCSHandler implements HttpHandler {
 
 
     /**
@@ -43,7 +43,7 @@ public class ISCSHandler implements HttpHandler {
      * @param configFile The path to the JSON configuration file
      * @throws IOException If the configuration file cannot be read or parsed
      */
-    public ISCSHandler(String configFile) throws IOException {
+    public deleted_ISCSHandler(String configFile) throws IOException {
         // Load all pools from config.json
         this.userServicePool = ConfigReader.getServicePool(configFile, "UserService");
         this.productServicePool = ConfigReader.getServicePool(configFile, "ProductService");

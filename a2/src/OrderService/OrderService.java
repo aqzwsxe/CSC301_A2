@@ -67,6 +67,7 @@ public class OrderService {
             }));
 
             server.start();
+            System.out.println("Order Service is LIVE at http://localhost:" + port);
         }catch (Exception e){
             System.err.println("Critical Failure: " + e.getMessage());
             e.printStackTrace();

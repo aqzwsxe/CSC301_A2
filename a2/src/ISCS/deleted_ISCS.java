@@ -4,7 +4,6 @@ import Utils.ConfigReader;
 import Utils.DatabaseManager;
 import com.sun.net.httpserver.HttpServer;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.sql.SQLException;
@@ -14,7 +13,7 @@ import java.util.concurrent.Executors;
  *  ISCS acts as the central middleware of the architecture. It facilitates communication between
  *  the Order, User, and Product services
  */
-public class ISCS {
+public class deleted_ISCS {
     /**
      * The entry point for the ISCS service. Initializes the HTTP server, sets up the request contexts,
      * and configures an executor to handle concurrent service requests
@@ -49,7 +48,7 @@ public class ISCS {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
 
         // The Handler must now perform dynamic routing based on config.json
-        server.createContext("/", new ISCSHandler(configFile));
+        server.createContext("/", new deleted_ISCSHandler(configFile));
 
         // Virtual threads are perfect for a high-traffic bridge
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());

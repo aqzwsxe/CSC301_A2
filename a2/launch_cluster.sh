@@ -66,11 +66,7 @@ case $HOSTNAME in
     start_service "OrderService.OrderService" 16007 6
     ;;
   # The Order Service
-  "dh2026pc10")
-    for i in {0..3}; do
-        start_service "ISCS.ISCS" $((17001 + i)) $i
-    done
-    ;;
+
   "dh2026pc11")
     echo "Host pc11: Starting Load Balancer..."
     start_service "Utils.LoadBalancer" 18001 0

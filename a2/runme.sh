@@ -40,7 +40,6 @@ case "$1" in
             compile_service "UserService"
             compile_service "OrderService"
             compile_service "ProductService"
-            compile_service "ISCS"
 
             echo "--- Compilation Complete ---"
             echo "Remote DB on VM (142.1.114.76) will be used at runtime."

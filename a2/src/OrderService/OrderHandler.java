@@ -15,11 +15,14 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Handles the given order request and generates an appropriate response.
@@ -30,21 +33,17 @@ public class OrderHandler implements HttpHandler {
      * All requests that require data from the User or Product services are
      * forwarded to this address for routing
      */
-    private final java.util.List<String> iscsUrls;
-    private final java.util.concurrent.atomic.AtomicInteger iscsCounter = new java.util.concurrent.atomic.AtomicInteger(0);
-//    private final String configFile; // Store this to reload if needed
-    /**
-     * The HTTP client used for backend.
-     */
+    private final List<String> userServicePool;
+    private final List<String> productServicePool;
+    private final List<String> orderServicePool;
+
+    private final AtomicInteger userCounter = new AtomicInteger(0);
+    private final AtomicInteger productCounter = new AtomicInteger(0);
+    private final AtomicInteger orderCounter = new AtomicInteger(0);
+
     private final HttpClient client;
-
-    private static final CacheManager<Integer, String> orderCache= new CacheManager<>();
-
-    /**
-     * For thread safety
-     */
+    private static final CacheManager<Integer, String> orderCache = new CacheManager<>();
     private static AtomicBoolean isFirstRequest = new AtomicBoolean(true);
-
     private static final boolean DEBUG_MODE = false;
 
     private void debugOrSend(HttpExchange exchange, int status, byte[] message) throws IOException {
@@ -101,24 +100,23 @@ public class OrderHandler implements HttpHandler {
      * @throws IOException If the configuration file cannot be accessed or parsed
      */
     public OrderHandler(String configFile) throws IOException {
-        this.iscsUrls = ConfigReader.getServicePool(configFile, "InterServiceCommunication");
-
-        if (this.iscsUrls.isEmpty()) {
-            throw new IOException("No ISCS nodes found in configuration!");
-        }
+        // Load actual service pools directly from config
+        this.userServicePool = ConfigReader.getServicePool(configFile, "UserService");
+        this.productServicePool = ConfigReader.getServicePool(configFile, "ProductService");
+        this.orderServicePool = ConfigReader.getServicePool(configFile, "OrderService");
 
         this.client = HttpClient.newBuilder()
                 .executor(Executors.newVirtualThreadPerTaskExecutor())
-                .connectTimeout(java.time.Duration.ofSeconds(2))
+                .connectTimeout(Duration.ofSeconds(2))
                 .build();
 
-        System.out.println("OrderHandler initialized with " + iscsUrls.size() + " ISCS nodes.");
+        System.out.println("OrderHandler: Direct Routing Mode. Users: " + userServicePool.size() + " Products: " + productServicePool.size());
     }
 
 
-    private String getNextIscsUrl(){
-        int index = Math.abs(iscsCounter.getAndIncrement() % iscsUrls.size());
-        return iscsUrls.get(index);
+    private String getNextUrl(List<String> pool, AtomicInteger counter){
+        int index = Math.abs(counter.getAndIncrement() % pool.size());
+        return pool.get(index);
     }
     /**
      * Main request dispatcher for the OrderService
@@ -138,105 +136,109 @@ public class OrderHandler implements HttpHandler {
         String bodyString = new String(requestBody, StandardCharsets.UTF_8);
         String path = exchange.getRequestURI().getPath();
         String temp_path = path.toLowerCase();
-        System.out.println("The Order handle method: " );
-        System.out.println("method "+ method);
-        System.out.println("The bodyString: "+ bodyString);
+
         try {
-            if (isFirstRequest.getAndSet(false)){
-                if (temp_path.equals("/restart")){
-                    // Keep the database
-                    System.out.println("OrderService: First is Restart. Persisting data.");
-                    signalInternalServices("restart");
+            // First Request Logic (Initialization)
+            if (isFirstRequest.getAndSet(false)) {
+                if (temp_path.equals("/restart")) {
+                    propagateSignal("restart");
                     debugOrSend(exchange, 200, requestBody);
                     return;
-                }else if(temp_path.equals("/clear")){
-                    System.out.println("OrderService: First request is " + path + ". Wiping DB.");
+                } else if (temp_path.equals("/clear")) {
                     DatabaseManager.clearAllData();
-                    signalInternalServices("clear");
+                    propagateSignal("clear");
                     debugOrSend(exchange, 200, requestBody);
                     return;
                 }
-                //else {
-                    //System.out.println("OrderService: First request is " + path + ". Defaulting to WIPE.");
-                    //DatabaseManager.clearAllData();
-                    //signalInternalServices("clear");
-                //}
             }
 
-            // if it is not the first request, we still signal others
-            // do nothing to the database
-            if(temp_path.equals("/restart")){
-                signalInternalServices("restart");
-                debugOrSend(exchange, 200, requestBody);
-                return;
-
-            }
-
-            if (temp_path.equals("/clear")) {
-                DatabaseManager.clearAllData();
-                signalInternalServices("clear");
+            // Signal Handling (Merging ISCS Global Logic)
+            if (temp_path.equals("/restart") || temp_path.equals("/clear")) {
+                if (temp_path.equals("/clear")) DatabaseManager.clearAllData();
+                propagateSignal(temp_path.substring(1));
                 debugOrSend(exchange, 200, requestBody);
                 return;
             }
 
-            if (temp_path.equals("/shutdown")){
-                System.out.println("OrderService: Shutting down all services");
-                signalInternalServices("shutdown");
+            if (temp_path.equals("/shutdown")) {
+                propagateSignal("shutdown");
                 debugOrSend(exchange, 200, requestBody);
                 new Thread(() -> {
-                    try { Thread.sleep(500); System.exit(0); }
-                    catch (Exception ignored) {}
+                    try { Thread.sleep(800); System.exit(0); } catch (Exception ignored) {}
                 }).start();
                 return;
             }
 
-
-
-            if(method.equalsIgnoreCase("GET") ){
-                if(path.startsWith("/user/purchased/")){
-                    handleUserPurchased(exchange,path, requestBody);
-                    return;
-                }else if(path.startsWith("/order/")){
+            // Routing Logic
+            if (method.equalsIgnoreCase("GET")) {
+                if (path.startsWith("/user/purchased/")) {
+                    handleUserPurchased(exchange, path, requestBody);
+                } else if (path.startsWith("/order/")) {
                     handleGetOrder(exchange, path, requestBody);
-                    return;
-                }else if(path.startsWith("/user/")){
-                    handleGetUser(exchange, method, path, requestBody);
-                    return;
+                } else if (path.startsWith("/user/")) {
+                    // Forward directly to User Service
+                    forwardToService(exchange, getNextUrl(userServicePool, userCounter), path, requestBody);
+                } else if (path.startsWith("/product/")) {
+                    // Forward directly to Product Service
+                    forwardToService(exchange, getNextUrl(productServicePool, productCounter), path, requestBody);
                 }
-                else if(path.startsWith("/product/")){
-                    handleGetProduct(exchange, method, path, requestBody);
-                    return;
-                }
-            }else if(method.equalsIgnoreCase("DELETE")&& path.startsWith("/order/")){
+            } else if (method.equalsIgnoreCase("DELETE") && path.startsWith("/order/")) {
                 handleCancelOrder(exchange, path, requestBody);
-            } else if(method.equalsIgnoreCase("POST") && path.startsWith("/order")  && bodyString.contains("place order")){
-                handlePlaceOrder(exchange, bodyString,requestBody);
-            }else{
-                forwardToISCS(exchange,method,path,requestBody);
+            } else if (method.equalsIgnoreCase("POST") && path.startsWith("/order") && bodyString.contains("place order")) {
+                handlePlaceOrder(exchange, bodyString, requestBody);
+            } else {
+                // Determine destination based on path prefix
+                String target = path.startsWith("/user") ? getNextUrl(userServicePool, userCounter) : getNextUrl(productServicePool, productCounter);
+                forwardToService(exchange, target, path, requestBody);
             }
-        }catch (Exception e){
-            try {
-                sendError(exchange, 400, "Invalid Request", requestBody);
-            }catch (Exception e1){}
-
+        } catch (Exception e) {
+            sendError(exchange, 400, "Invalid Request", requestBody);
         }
+    }
+
+    // 3. Updated forwardToService (Replaces forwardToISCS)
+    private void forwardToService(HttpExchange exchange, String targetBaseUrl, String path, byte[] requestBody) {
+        String fullUrl = targetBaseUrl + path;
+        HttpRequest.Builder builder = HttpRequest.newBuilder().uri(URI.create(fullUrl));
+
+        if (exchange.getRequestMethod().equalsIgnoreCase("POST")) {
+            builder.header("Content-Type", "application/json");
+            builder.POST(HttpRequest.BodyPublishers.ofByteArray(requestBody));
+        } else {
+            builder.GET();
+        }
+
+        client.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofByteArray())
+                .thenAccept(res -> {
+                    try { debugOrSend(exchange, res.statusCode(), res.body()); } catch (IOException ignored) {}
+                })
+                .exceptionally(ex -> {
+                    try { sendError(exchange, 502, "Bad Gateway", requestBody); } catch (IOException ignored) {}
+                    return null;
+                });
+    }
+    private void propagateSignal(String command) {
+        // Replicating ISCS logic to hit EVERY node in the config
+        String subPath = "/internal/" + command;
+        for (String url : userServicePool) sendSignal(url + "/user" + subPath);
+        for (String url : productServicePool) sendSignal(url + "/product" + subPath);
+        for (String url : orderServicePool) sendSignal(url + "/order" + subPath);
+    }
+
+    private void sendSignal(String url) {
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofMillis(500))
+                .GET().build();
+        client.sendAsync(req, HttpResponse.BodyHandlers.discarding());
     }
 
     private void handleGetUser(HttpExchange exchange, String method, String path, byte[] requestBody) throws IOException {
-        try {
-            // The assignment says OrderService handles user functionality by forwarding.
-            forwardToISCS(exchange, method, path, requestBody);
-        } catch (InterruptedException e) {
-            sendError(exchange, 500, "Internal Server Error", requestBody);
-        }
+        forwardToService(exchange, getNextUrl(userServicePool, userCounter), path, requestBody);
     }
 
     private void handleGetProduct(HttpExchange exchange, String method, String path, byte[] requestBody) throws IOException {
-        try {
-            forwardToISCS(exchange, method, path, requestBody);
-        } catch (InterruptedException e) {
-            sendError(exchange, 500, "Internal Server Error", requestBody);
-        }
+        forwardToService(exchange, getNextUrl(productServicePool, productCounter), path, requestBody);
     }
     /**
      * Get order information based on order id
@@ -317,7 +319,7 @@ public class OrderHandler implements HttpHandler {
                 return;
             }
             HttpResponse<String> prodRes = client.send(
-                    HttpRequest.newBuilder().uri(URI.create(getNextIscsUrl() + "/product/internal/" + order.getProduct_id())).GET().build(),
+                    HttpRequest.newBuilder().uri(URI.create(getNextUrl(productServicePool, productCounter) + "/product/internal/" + order.getProduct_id())).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
             );
 
@@ -361,109 +363,53 @@ public class OrderHandler implements HttpHandler {
         try {
             String userId = getJsonValue(body, "user_id");
             String productId = getJsonValue(body, "product_id");
-            // the quantity the order want
             String quantityStr = getJsonValue(body, "quantity");
 
-            if(userId==null || productId == null || quantityStr == null ||
-                    userId.equals("invalid-info") || productId.equals("invalid-info") || quantityStr.equals("invalid-info")){
-                System.out.println("Enter the if statement; something is null");
-                sendError(exchange,400, "Invalid Request", requestBody);
-                return;
-            }
-
-            int quantity = Integer.parseInt(quantityStr);
-            if(quantity <= 0){
+            if (userId == null || productId == null || quantityStr == null) {
                 sendError(exchange, 400, "Invalid Request", requestBody);
                 return;
             }
 
-            // Fire both requests in parallel
+            int quantity = Integer.parseInt(quantityStr);
+
+            // DIRECT CALLS to User and Product Services
             var userFuture = client.sendAsync(
-                    HttpRequest.newBuilder().uri(URI.create(getNextIscsUrl() + "/user/internal/" + userId)).GET().build(),
+                    HttpRequest.newBuilder().uri(URI.create(getNextUrl(userServicePool, userCounter) + "/user/internal/" + userId)).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
             );
 
             var prodFuture = client.sendAsync(
-                    HttpRequest.newBuilder().uri(URI.create(getNextIscsUrl() + "/product/internal/" + productId)).GET().build(),
+                    HttpRequest.newBuilder().uri(URI.create(getNextUrl(productServicePool, productCounter) + "/product/internal/" + productId)).GET().build(),
                     HttpResponse.BodyHandlers.ofString()
             );
 
-            // Wait for both (virtual threads will yield here)
             HttpResponse<String> userRes = userFuture.join();
             HttpResponse<String> prodRes = prodFuture.join();
 
             if (userRes.statusCode() == 404 || prodRes.statusCode() == 404) {
-                sendError(exchange, 404, "Invalid Request",requestBody);
+                sendError(exchange, 404, "Not Found", requestBody);
                 return;
             }
 
-            // Check stock
-            int availableQuantity = Integer.parseInt(getJsonValue(prodRes.body(), "quantity"));
-            if (quantity > availableQuantity) {
-                sendError(exchange, 400, "Exceeded quantity limit",requestBody);
+            int available = Integer.parseInt(getJsonValue(prodRes.body(), "quantity"));
+            if (quantity > available) {
+                sendError(exchange, 400, "Insufficient Stock", requestBody);
                 return;
             }
 
-            int newStock = availableQuantity - quantity;
-
-            boolean transactionSuccess = DatabaseManager.placeOrder(
-                    Integer.parseInt(productId),
-                    Integer.parseInt(userId),
-                    quantity,
-                    newStock
-            );
-            if (transactionSuccess) {
-                String successJson = String.format(
-                        "{\"product_id\": %s, \"user_id\": %s, \"quantity\": %d, \"status\": \"Success\"}",
-                        productId, userId, quantity);
+            if (DatabaseManager.placeOrder(Integer.parseInt(productId), Integer.parseInt(userId), quantity, available - quantity)) {
                 debugOrSend(exchange, 200, requestBody);
             } else {
-                sendError(exchange, 500, "Database Transaction Failed",requestBody);
+                sendError(exchange, 500, "DB Error", requestBody);
             }
-
-
-        }catch (Exception e){
-            sendError(exchange, 400, "Invalid Request",requestBody);
+        } catch (Exception e) {
+            sendError(exchange, 400, "Error", requestBody);
         }
-
 
     }
 
 
-    /**
-     * Forwards an incoming HTTP request to the ISCS Service.
-     * This method acts as a reverse proxy. It reconstructs the original request
-     * (method, path, and body) and dispatches it to the ISCS. Once the ISCS returns
-     * a response from the destination microservice, this method relays that response including
-     * the status code and data back to the original client
-     * @param exchange The original HttpExchange from the client
-     * @param method The HTTP verb (GET, POST, etc.) to reuse
-     * @param path The URI path to append to the ISCS base URL
-     * @param requestBody The raw bytes of the original request body
-     * @throws IOException If network communication with the ISCS fails
-     * @throws InterruptedException If the forwarding process is interrupted
-     */
-    private void forwardToISCS(HttpExchange exchange, String method, String path, byte[] requestBody) throws IOException, InterruptedException {
-        HttpRequest.Builder builder = HttpRequest.newBuilder().uri(URI.create(getNextIscsUrl() + path));
-        if(method.equalsIgnoreCase("POST")){
-            builder.header("Content-Type", "application/json");
-            builder.POST(HttpRequest.BodyPublishers.ofByteArray(requestBody));
-        }else{
-            builder.GET();
-        }
-        client.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofByteArray())
-                .thenAccept(res -> {
-                    try {
-                        debugOrSend(exchange, res.statusCode(), res.body());
-                    } catch (IOException e) {
-                        // Connection likely closed by client
-                    }
-                })
-                .exceptionally(ex -> {
-                    try { sendError(exchange, 502, "Bad Gateway", requestBody); } catch (IOException ignored) {}
-                    return null;
-                });
-    }
+
 
     /**
      * Sends an HTTP response with a JSON body.
@@ -572,34 +518,15 @@ public class OrderHandler implements HttpHandler {
 
     private boolean userExists(String userId){
         try {
-            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(getNextIscsUrl() + "/user/internal/" + userId)).GET().build();
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            String url = getNextUrl(userServicePool, userCounter) + "/user/internal/" + userId;
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
+            HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
             return response.statusCode() == 200;
         } catch (IOException | InterruptedException e) {
             return false;
         }
     }
 
-    private void signalInternalServices(String command){
-        String final_command = command;
-        if(command.equalsIgnoreCase("restart")|| command.equalsIgnoreCase("shutdown")){
-            final_command = command.toLowerCase();
-        }
-        String[] internalRoutes = {"/user/internal/" + final_command, "/product/internal/"+ final_command};
-
-        for(String route: internalRoutes){
-            try {
-                // Don't necessarily need to wait for a complex response, just ensure the message is sent
-                HttpRequest request = HttpRequest.newBuilder().
-                        uri(URI.create(getNextIscsUrl() + route)).
-                        POST(HttpRequest.BodyPublishers.noBody()).build();
-                client.send(request, HttpResponse.BodyHandlers.discarding());
-                System.out.println("Signaled " + route + " with command: " + command );
-            } catch (Exception e) {
-                System.err.println("Failed to signal " + route + ": " + e.getMessage());
-            }
-        }
-    }
 
 
 
