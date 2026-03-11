@@ -29,7 +29,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class OrderHandler implements HttpHandler {
     /**
-     * The base URL for the ISCS
      * All requests that require data from the User or Product services are
      * forwarded to this address for routing
      */
@@ -91,11 +90,6 @@ public class OrderHandler implements HttpHandler {
 //    }
 
     /**
-     * The constructor of OrderHandler. It constructs an Orderhandler by resolving the
-     * location of the ISCS. This constructor parses the configuration file to obtain the network coordinates (IP and Port)
-     * for the ISCS. It then initializes an HttpClient that will be used for all upstream communication during the
-     * order process
-
      * @param configFile the path to the configuration JSON file containing service network settings.
      * @throws IOException If the configuration file cannot be accessed or parsed
      */
@@ -119,11 +113,7 @@ public class OrderHandler implements HttpHandler {
         return pool.get(index);
     }
     /**
-     * Main request dispatcher for the OrderService
-     * This method intercepts all incoming HTTP traffic and routes it based on
-     * the HTTP verb and the URI path. Requests specific to the order lifecycle
-     * (GET, DELETE, or 'place order' POSTs) are handled locally, while all other traffic
-     * if forwarded to the ISCS for further routing
+     *
      * @param exchange the exchange containing the request from the
      *                 client and used to send the response
      * @throws IOException If an I/O error occurs during request reading or response delivery
@@ -152,7 +142,6 @@ public class OrderHandler implements HttpHandler {
                 }
             }
 
-            // Signal Handling (Merging ISCS Global Logic)
             if (temp_path.equals("/restart") || temp_path.equals("/clear")) {
                 if (temp_path.equals("/clear")) DatabaseManager.clearAllData();
                 propagateSignal(temp_path.substring(1));
@@ -218,7 +207,6 @@ public class OrderHandler implements HttpHandler {
                 });
     }
     private void propagateSignal(String command) {
-        // Replicating ISCS logic to hit EVERY node in the config
         String subPath = "/internal/" + command;
         for (String url : userServicePool) sendSignal(url + "/user" + subPath);
         for (String url : productServicePool) sendSignal(url + "/product" + subPath);
@@ -506,7 +494,7 @@ public class OrderHandler implements HttpHandler {
             // Aggregate purchases
             Map<Integer, Integer> purchases = DatabaseManager.getUserPurchases(userId);
             String jsonResponse = mapToJson(purchases);
-            debugOrSend(exchange, 200, requestBody);
+            debugOrSend(exchange, 200, jsonResponse.getBytes(StandardCharsets.UTF_8));
         }catch (NumberFormatException e){
             String s1 = new String(requestBody);
             sendError(exchange, 400, s1, requestBody);
