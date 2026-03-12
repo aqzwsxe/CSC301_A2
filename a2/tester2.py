@@ -36,9 +36,12 @@ rps_counter = {"total": 0, "success": 0}
 async def send_post(session, url, payload):
     try:
         async with session.post(url, json=payload) as resp:
-            await resp.text()
+            text = await resp.text()
+            if resp.status not in [200, 201]:
+                print(f"Error {resp.status} from {url}: {text[:100]}") # Print first 100 chars of error
             return resp.status
-    except Exception:
+    except Exception as e:
+        print(f"Connection Error: {e}")
         return None
 
 async def send_get(session, url, payload):
