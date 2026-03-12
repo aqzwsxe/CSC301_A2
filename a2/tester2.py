@@ -4,94 +4,141 @@ import json
 import random
 import time
 
-# This tester randomly takes testcases from user, product, and order payloads in CSC301_A1_testcases
-# and outputs the request per second every 3 seconds
-
-# Load balancer base URL
+# --- CONFIGURATION ---
 LB_BASE = "http://142.1.46.14:18001"
+CONCURRENCY = 100  # Number of concurrent worker tasks
+PRINT_INTERVAL = 3  # Seconds between RPS reports
+SETUP_COUNT = 200   # Number of users/products to pre-create
 
 # Endpoints
 USER_URL = f"{LB_BASE}/user"
-ORDER_URL = f"{LB_BASE}/order"
 PRODUCT_URL = f"{LB_BASE}/product"
+ORDER_URL = f"{LB_BASE}/order"
 
-# Concurrency
-CONCURRENCY = 50  # number of concurrent workers
-PRINT_INTERVAL = 3  # seconds
+# State Tracking
+VALID_USERS = []
+VALID_PRODUCTS = []
+rps_counter = {"total": 0, "success": 0, "latency": 0.0}
 
-# Load payloads from JSON files
-with open("CSC301_A1_testcases/payloads/user_testcases.json") as f:
-    user_payloads = list(json.load(f).values())
-
-with open("CSC301_A1_testcases/payloads/product_testcases.json") as f:
-    product_payloads = list(json.load(f).values())
-
-with open("CSC301_A1_testcases/payloads/order_testcases.json") as f:
-    order_payloads = list(json.load(f).values())
-
-# Counters for RPS
-rps_counter = {"total": 0, "success": 0}
-
-# Async HTTP functions
-async def send_post(session, url, payload):
+async def clear_database(session):
+    """Resets the environment before testing."""
+    print("Clearing database...")
     try:
-        async with session.post(url, json=payload) as resp:
-            text = await resp.text()
-            if resp.status not in [200, 201]:
-                print(f"Error {resp.status} from {url}: {text[:100]}") # Print first 100 chars of error
-            return resp.status
+        # Assuming your POST /user or /product with 'clear' command resets the system
+        async with session.post(f"{USER_URL}", json={"command": "clear"}) as resp:
+            return resp.status == 200
     except Exception as e:
-        print(f"Connection Error: {e}")
-        return None
+        print(f"Clear failed: {e}")
+        return False
 
-async def send_get(session, url, payload):
-    # Some GET payloads are sent via query or JSON depending on your service
-    # Here we just simulate sending them as POST to keep it simple
+async def setup_data(session):
+    """Phase 1: Warm up the database with valid users and products."""
+    print(f"Starting Setup: Creating {SETUP_COUNT} users and products...")
+
+    # Create Users
+    for i in range(1, SETUP_COUNT + 1):
+        payload = {"command": "create", "id": i, "username": f"user{i}", "email": f"u{i}@test.com"}
+        async with session.post(USER_URL, json=payload) as resp:
+            if resp.status in [200, 201]:
+                VALID_USERS.append(i)
+
+    # Create Products with high stock
+    for i in range(1, SETUP_COUNT + 1):
+        payload = {
+            "command": "create", "id": i, "name": f"item{i}",
+            "description": "benchmark_item", "price": 10.0, "quantity": 100000
+        }
+        async with session.post(PRODUCT_URL, json=payload) as resp:
+            if resp.status in [200, 201]:
+                VALID_PRODUCTS.append(i)
+
+    print(f"Setup Complete. Valid Users: {len(VALID_USERS)}, Valid Products: {len(VALID_PRODUCTS)}")
+
+async def perform_request(session):
+    """Logic for a single request pick."""
+    # Weighting: 70% Orders, 20% GET Product, 10% GET Order
+    choice = random.random()
+    start_time = time.perf_counter()
+    status = 0
+
     try:
-        async with session.post(url, json=payload) as resp:
-            await resp.text()
-            return resp.status
+        if choice < 0.70:
+            # POST: Place Order
+            payload = {
+                "command": "place order",
+                "user_id": random.choice(VALID_USERS),
+                "product_id": random.choice(VALID_PRODUCTS),
+                "quantity": random.randint(1, 2)
+            }
+            async with session.post(ORDER_URL, json=payload) as resp:
+                status = resp.status
+
+        elif choice < 0.90:
+            # GET: Product Info
+            pid = random.choice(VALID_PRODUCTS)
+            async with session.get(f"{PRODUCT_URL}/{pid}") as resp:
+                status = resp.status
+
+        else:
+            # GET: Order Info (Using a likely valid ID)
+            oid = random.randint(1, 100)
+            async with session.get(f"{ORDER_URL}/{oid}") as resp:
+                status = resp.status
+
     except Exception:
-        return None
+        status = 500
 
-# Worker: continuously send requests
+    # Record metrics
+    latency = time.perf_counter() - start_time
+    rps_counter["total"] += 1
+    rps_counter["latency"] += latency
+    if status in [200, 201]:
+        rps_counter["success"] += 1
+
 async def worker(session):
+    """Continuous loop for workers."""
     while True:
-        # Randomly pick a service to hit
-        service = random.choice(["user", "product", "order"])
-        if service == "user":
-            payload = random.choice(user_payloads)
-            status = await send_post(session, USER_URL, payload)
-        elif service == "product":
-            payload = random.choice(product_payloads)
-            status = await send_post(session, PRODUCT_URL, payload)
-        elif service == "order":
-            payload = random.choice(order_payloads)
-            status = await send_post(session, ORDER_URL, payload)
+        await perform_request(session)
 
-        # Update counters
-        rps_counter["total"] += 1
-        if status in [200, 201]:
-            rps_counter["success"] += 1
-
-# Monitor: print RPS every interval
 async def monitor():
+    """Prints the stats every PRINT_INTERVAL."""
     while True:
         await asyncio.sleep(PRINT_INTERVAL)
         total = rps_counter["total"]
         success = rps_counter["success"]
-        print(f"Last {PRINT_INTERVAL}s - Total Requests: {total}, Success: {success}, Request Per Second: {total/PRINT_INTERVAL:.2f}")
-        # reset counters
+        avg_lat = (rps_counter["latency"] / total * 1000) if total > 0 else 0
+
+        print(f"[{time.strftime('%H:%M:%S')}] RPS: {total/PRINT_INTERVAL:.2f} | "
+              f"Success: {success} | Total: {total} | Avg Latency: {avg_lat:.2f}ms")
+
+        # Reset interval counters
         rps_counter["total"] = 0
         rps_counter["success"] = 0
+        rps_counter["latency"] = 0.0
 
-# Main async function
 async def main():
-    connector = aiohttp.TCPConnector(limit=CONCURRENCY)
+    # Use a high-limit connector for maximum concurrency
+    connector = aiohttp.TCPConnector(limit=CONCURRENCY, keepalive_timeout=60)
     async with aiohttp.ClientSession(connector=connector) as session:
-        workers = [worker(session) for _ in range(CONCURRENCY)]
-        tasks = workers + [monitor()]
-        await asyncio.gather(*tasks)
+        # 1. Cleanup
+        await clear_database(session)
+
+        # 2. Warm up
+        await setup_data(session)
+
+        if not VALID_USERS or not VALID_PRODUCTS:
+            print("Setup failed to create data. Check your services!")
+            return
+
+        print(f"Launching Stress Test with {CONCURRENCY} workers...")
+        # 3. Stress Test
+        workers = [asyncio.create_task(worker(session)) for _ in range(CONCURRENCY)]
+        monitor_task = asyncio.create_task(monitor())
+
+        await asyncio.gather(monitor_task, *workers)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nStopping tester...")
