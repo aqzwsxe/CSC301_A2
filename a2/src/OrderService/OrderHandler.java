@@ -399,7 +399,13 @@ public class OrderHandler implements HttpHandler {
 
             if (success) {
                 productInfoCache.remove(productId);
-                debugOrSend(exchange, 200, requestBody);
+                String responseJson = String.format(
+                        "{\n  \"product_id\": %s,\n  \"user_id\": %s,\n  \"quantity\": %d,\n  \"status\": \"Success\"\n}",
+                        productId, userId, quantity
+                );
+
+                byte[] responseBytes = responseJson.getBytes(StandardCharsets.UTF_8);
+                debugOrSend(exchange, 200, responseBytes);
             } else {
                 sendError(exchange, 500, "Database Transaction Failed", requestBody);
             }
