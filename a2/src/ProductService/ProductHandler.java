@@ -1,6 +1,5 @@
 package ProductService;
 
-import Utils.CacheManager;
 import Utils.DatabaseManager;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -18,7 +17,6 @@ import java.sql.SQLException;
 public class ProductHandler implements HttpHandler {
     String errorResponse = "{}\n";
 
-    private static final CacheManager<Integer, String> productCache = new CacheManager<>();
     // 1. ADD THE DEBUG TOGGLE
     private static final boolean DEBUG_MODE = false;
 
@@ -88,7 +86,6 @@ public class ProductHandler implements HttpHandler {
         if (path.endsWith("/clear")) {
             try {
                 DatabaseManager.clearAllData();
-                productCache.clear();
                 debugOrSend(exchange, 200, "{}".getBytes(), requestBody);
             } catch (SQLException e) {
                 System.err.println("Failed to clear database: " + e.getMessage());
@@ -139,48 +136,24 @@ public class ProductHandler implements HttpHandler {
      */
     private void handleGet(HttpExchange exchange, String path, byte[] requestBody) throws IOException {
         String[] parts = path.split("/");
-        if(parts.length < 3){
-            // debugOrSend
+        if(parts.length < 3) {
             debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
             return;
         }
-        String idStr = parts[parts.length - 1];
 
+        try {
+            int id = Integer.parseInt(parts[parts.length - 1]);
+            Product product = DatabaseManager.getProductById(id);
 
-        int id;
-        if (idStr == null) {
-            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
-            return;
-        } else {
-            try {
-                id = Integer.parseInt(idStr);
-            } catch (NumberFormatException e) {
-                debugOrSend(exchange,400, "{}\n".getBytes(), requestBody);
-                return;
+            if(product != null){
+                debugOrSend(exchange, 200, product.toJson().getBytes(), requestBody);
+            } else {
+                debugOrSend(exchange, 404, "{}\n".getBytes(), requestBody);
             }
-        }
-        String cacheProduct = productCache.get(id);
-        if (cacheProduct != null){
-            debugOrSend(exchange, 200, cacheProduct.getBytes(), requestBody);
-            return;
-        }
-
-
-        // get the product from the real database
-        Product product = DatabaseManager.getProductById(id);
-
-        if(product != null){
-            String jsonResponse = product.toJson();
-            debugOrSend(exchange, 200, jsonResponse.getBytes(), requestBody);
-            productCache.put(id, jsonResponse);
-        }
-        else{
-            productCache.invalidate(id);
-            debugOrSend(exchange,404, "{}\n".getBytes(), requestBody);
+        } catch (NumberFormatException e) {
+            debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
         }
     }
-    // bridge the gap between a raw HTTP request and the product data
-    // handle both Get requests and the Post requests
 
 
     /**
@@ -388,7 +361,6 @@ public class ProductHandler implements HttpHandler {
     public void handleCreate(HttpExchange exchange, int id, String body, byte[] requestBody) throws IOException {
         // ID issues:
         if(DatabaseManager.getProductById(id)!=null){
-            productCache.invalidate(id);
             debugOrSend(exchange, 409, "{}\n".getBytes(), requestBody);
             return;
         }
@@ -495,7 +467,6 @@ public class ProductHandler implements HttpHandler {
             }
         }
         DatabaseManager.updateProduct(product.getPid(),product.getName(),product.getDescription(),product.getPrice(),product.getQuantity());
-        productCache.invalidate(id);
         debugOrSend(exchange, 200, product.toJson().getBytes(), requestBody);
         return;
     }
@@ -547,7 +518,6 @@ public class ProductHandler implements HttpHandler {
                 if (product.getName().equals(name)  && product.getPrice() == price &&
                         product.getQuantity() == quantity) { // && product.getDescription().equals(description)
                         DatabaseManager.deleteProduct(id, name,price,quantity);
-                        productCache.invalidate(id);
                     debugOrSend(exchange, 200, "{}\n".getBytes(), requestBody);
                 } else {
                     debugOrSend(exchange,404, "{}\n".getBytes(), requestBody);

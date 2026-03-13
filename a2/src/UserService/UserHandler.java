@@ -1,6 +1,5 @@
 package UserService;
 
-import Utils.CacheManager;
 import Utils.DatabaseManager;
 import Utils.PersistenceManager;
 import com.sun.net.httpserver.HttpExchange;
@@ -23,7 +22,6 @@ import java.util.Map;
  */
 public class UserHandler implements HttpHandler {
 
-    private static final CacheManager<Integer, String> userCache = new CacheManager<>();
     private static final boolean DEBUG_MODE = false;
 
     private void debugOrSend(HttpExchange exchange, int status, byte[] responseMessage, byte[] originalRequest) throws IOException {
@@ -87,7 +85,6 @@ public class UserHandler implements HttpHandler {
             try {
                 DatabaseManager.clearAllData();
                 User.id_counter.set(0);
-                userCache.clear();
                 debugOrSend(exchange, 200, "{}".getBytes(), requestBody);
             } catch (SQLException e) {
                 debugOrSend(exchange, 500, "{}".getBytes(), requestBody);
@@ -100,14 +97,12 @@ public class UserHandler implements HttpHandler {
                 try { Thread.sleep(200); System.exit(0); } catch (Exception ignored) {}
             }).start();
         }else if (path.contains("/internal/")) {
-            // ADD THIS: Handle the lookup for OrderService
+            // This is still needed for OrderService stock/user checks
             try {
                 String[] parts = path.split("/");
                 int id = Integer.parseInt(parts[parts.length - 1]);
                 User user = DatabaseManager.getUserById(id);
-
                 if (user != null) {
-                    // Return the user JSON so OrderService can continue
                     String userJson = String.format("{\"id\":%d, \"username\":\"%s\"}", user.getId(), user.getUsername());
                     sendResponse(exchange, 200, userJson);
                 } else {
@@ -173,22 +168,16 @@ public class UserHandler implements HttpHandler {
      */
     private void handleGet(HttpExchange exchange, String path, byte[] requestBody) throws IOException {
         String[] parts = path.split("/");
-        if(parts.length < 3){
-            // debugOrSend
+        if (parts.length < 3) {
             debugOrSend(exchange, 400, "{}\n".getBytes(StandardCharsets.UTF_8), requestBody);
             return;
         }
-        int id;
+
         try {
-            id = Integer.parseInt(parts[parts.length - 1]);
-        } catch (Exception e) {
-            debugOrSend(exchange, 400, "{}\n".getBytes(StandardCharsets.UTF_8), requestBody);
-            return;
-        }
-        try {
+            int id = Integer.parseInt(parts[parts.length - 1]);
+
             if (path.contains("/user/purchased/")) {
                 Map<Integer, Integer> actualPurchases = DatabaseManager.getUserPurchases(id);
-
                 StringBuilder json = new StringBuilder("{");
                 int count = 0;
                 for (Map.Entry<Integer, Integer> entry : actualPurchases.entrySet()) {
@@ -196,62 +185,30 @@ public class UserHandler implements HttpHandler {
                     if (++count < actualPurchases.size()) json.append(",");
                 }
                 json.append("}");
-
                 debugOrSend(exchange, 200, json.toString().getBytes(StandardCharsets.UTF_8), requestBody);
-                return;
-            }
-
-            // 2. Handle Regular User Info (With Cache)
-            String cachedResponse = userCache.get(id);
-            if (cachedResponse != null) {
-                debugOrSend(exchange, 200, cachedResponse.getBytes(StandardCharsets.UTF_8), requestBody);
                 return;
             }
 
             User user = DatabaseManager.getUserById(id);
             if (user == null) {
                 debugOrSend(exchange, 404, "{}\n".getBytes(), requestBody);
-                return; // Stop here! Don't try to get the password.
+                return;
             }
-//            if(path.contains("/user/purchased/") && parts.length >= 4){
-//
-//                if (user==null){
-//                    debugOrSend(exchange, 404, "{}");
-//                    return;
-//                }
-//
-//                debugOrSend(exchange, 200, user.purchasesToJson());
-//                return;
-//            }
 
-            String hashed_password = user.getPassword();
             String res1 = String.format("{\n" +
                     "        \"id\": %d,\n" +
                     "        \"username\": \"%s\",\n" +
                     "        \"email\": \"%s\",\n" +
                     "        \"password\": \"%s\"\n" +
-                    "    }", user.getId(), user.getUsername(), user.getEmail(), hashed_password);
+                    "    }", user.getId(), user.getUsername(), user.getEmail(), user.getPassword());
 
-            userCache.put(user.getId(), res1);
-            if(user!=null){
-                debugOrSend(exchange, 200, res1.getBytes(), requestBody);
-                return;
-            }
-            else{
-                debugOrSend(exchange,404, "{}\n".getBytes(), requestBody);
-                return;
-            }
-        }catch (NumberFormatException e){
+            debugOrSend(exchange, 200, res1.getBytes(), requestBody);
+
+        } catch (Exception e) {
             debugOrSend(exchange, 400, "{}\n".getBytes(), requestBody);
-            return;
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
         }
 
-
     }
-    // bridge the gap between a raw HTTP request and the User data
-    // handle both Get requests and the Post requests
 
 
     /**
@@ -330,11 +287,7 @@ public class UserHandler implements HttpHandler {
             int productId = Integer.parseInt(getJsonValue(body, "product_id"));
             int quantity = Integer.parseInt(getJsonValue(body, "quantity"));
 
-            // 1. Permanent Sync: Write to PostgreSQL
             DatabaseManager.recordPurchase(userId, productId, quantity);
-
-            // 2. Cache Sync: Invalidate the user cache because their history changed
-            userCache.invalidate(userId);
 
             debugOrSend(exchange, 200, "{}".getBytes(StandardCharsets.UTF_8), requestBody);
         } catch (Exception e) {
@@ -424,7 +377,6 @@ public class UserHandler implements HttpHandler {
     public void handleCreate(HttpExchange exchange, int id, String body, byte[] requestBody) throws IOException, NoSuchAlgorithmException, SQLException {
         //System.out.println("Start the handle create method");
         if(DatabaseManager.getUserById(id)!=null){
-            userCache.invalidate(id);
             //System.out.println("User already exist");
             debugOrSend(exchange,409,"{}\n".getBytes(), requestBody);
             return;
@@ -526,7 +478,6 @@ public class UserHandler implements HttpHandler {
             user.setPassword(hashed);
         }
         DatabaseManager.updateUser(id, user.getUsername(), user.getEmail(), user.getPassword());
-        userCache.invalidate(id);
         String res1 = String.format("{\n" +
                 "        \"id\": %d,\n" +
                 "        \"username\": \"%s\",\n" +
@@ -573,7 +524,6 @@ public class UserHandler implements HttpHandler {
         int resultStatus = DatabaseManager.deleteUserSecure(id, reqUsername, reqEmail, hashedIncoming);
 
         if (resultStatus == 200) {
-            userCache.invalidate(id);
             debugOrSend(exchange, 200, "{}\n".getBytes(), requestBody);
         } else if (resultStatus == 401) {
             // ID exists but email/password didn't match

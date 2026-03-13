@@ -45,6 +45,9 @@ public class OrderHandler implements HttpHandler {
     private static AtomicBoolean isFirstRequest = new AtomicBoolean(true);
     private static final boolean DEBUG_MODE = false;
 
+    private static final Map<String, Boolean> userCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<String, String> productInfoCache = new java.util.concurrent.ConcurrentHashMap<>();
+
     private void debugOrSend(HttpExchange exchange, int status, byte[] message) throws IOException {
         if (DEBUG_MODE) {
             //System.out.println("-------------------------------------");
@@ -244,30 +247,20 @@ public class OrderHandler implements HttpHandler {
      */
     private void handleGetOrder(HttpExchange exchange, String path, byte[] requestBody) throws IOException {
         String[] parts = path.split("/");
-        if (parts.length < 3){
+        if (parts.length < 3) {
             sendError(exchange, 400, "{}\n", requestBody);
             return;
         }
 
         try {
-            // Use parts.length - 1 to get the ID from the end of the URL (/order/1)
             int orderId = Integer.parseInt(parts[parts.length - 1]);
 
-            // 1. Check Cache
-            String cached = orderCache.get(orderId);
-            if (cached != null){
-                // Pass the CACHED string bytes as the response
-                debugOrSend(exchange, 200, cached.getBytes(StandardCharsets.UTF_8));
-                return;
-            }
-
-            // 2. Check Database
+            // No local cache check needed here anymore!
+            // Redis at the Load Balancer tier handles this.
             Order order = DatabaseManager.getOrderById(orderId);
+
             if (order != null) {
-                String json1 = order.toJson();
-                orderCache.put(orderId, json1);
-                // Pass the ORDER JSON bytes as the response
-                debugOrSend(exchange, 200, json1.getBytes(StandardCharsets.UTF_8));
+                debugOrSend(exchange, 200, order.toJson().getBytes(StandardCharsets.UTF_8));
             } else {
                 sendError(exchange, 404, "{}\n", requestBody);
             }
@@ -350,6 +343,8 @@ public class OrderHandler implements HttpHandler {
      * @throws IOException if an I/O error occurs while sending the response
      */
     private void handlePlaceOrder(HttpExchange exchange, String body, byte[] requestBody) throws IOException, InterruptedException {
+        if (userCache.size() > 10000) userCache.clear();
+        if (productInfoCache.size() > 10000) productInfoCache.clear();
         try {
             String userId = getJsonValue(body, "user_id");
             String productId = getJsonValue(body, "product_id");
@@ -359,54 +354,42 @@ public class OrderHandler implements HttpHandler {
                 sendError(exchange, 400, "{}\n", requestBody);
                 return;
             }
-
             int quantity = Integer.parseInt(quantityStr);
 
-            // DIRECT CALLS to User and Product Services
-            //System.out.println("Step 1: Starting Order Create");
-            var userFuture = client.sendAsync(
-                    HttpRequest.newBuilder().uri(URI.create(getNextUrl(userServicePool, userCounter) + "/user/internal/" + userId)).GET().build(),
-                    HttpResponse.BodyHandlers.ofString()
-            );
+            if (!userCache.getOrDefault(userId, false)) {
+                String userUrl = getNextUrl(userServicePool, userCounter) + "/user/internal/" + userId;
+                HttpResponse<String> userRes = client.send(HttpRequest.newBuilder().uri(URI.create(userUrl)).GET().build(), HttpResponse.BodyHandlers.ofString());
 
-            var prodFuture = client.sendAsync(
-                    HttpRequest.newBuilder().uri(URI.create(getNextUrl(productServicePool, productCounter) + "/product/internal/" + productId)).GET().build(),
-                    HttpResponse.BodyHandlers.ofString()
-            );
+                if (userRes.statusCode() == 200) {
+                    userCache.put(userId, true);
+                } else {
+                    sendError(exchange, 404, "{}\n", requestBody);
+                    return;
+                }
+            }
 
-            //System.out.println("Step 2: Waiting for User/Product services...");
-            HttpResponse<String> userRes = userFuture.join();
-            //System.out.println("Step 3: User Service responded with: " + userRes.statusCode());
-            HttpResponse<String> prodRes = prodFuture.join();
-            //System.out.println("Step 4: Product Service responded with: " + prodRes.statusCode());
+            String prodBody = productInfoCache.get(productId);
+            if (prodBody == null) {
+                String prodUrl = getNextUrl(productServicePool, productCounter) + "/product/internal/" + productId;
+                HttpResponse<String> prodRes = client.send(HttpRequest.newBuilder().uri(URI.create(prodUrl)).GET().build(), HttpResponse.BodyHandlers.ofString());
 
-            if (userRes.statusCode() == 404 || prodRes.statusCode() == 404) {
-                sendError(exchange, 404, "{}\n", requestBody);
-                return;
+                if (prodRes.statusCode() == 200) {
+                    prodBody = prodRes.body();
+                    productInfoCache.put(productId, prodBody);
+                } else {
+                    sendError(exchange, 404, "{}\n", requestBody);
+                    return;
+                }
             }
-            // 2. Extract and Validate the Quantity String
-            String availStr = getJsonValue(prodRes.body(), "quantity");
-            if (availStr == null) {
-                //System.err.println("FAILED: Missing 'quantity' in Product Service response body: " + prodRes.body());
-                sendError(exchange, 500, "Upstream Format Error", requestBody);
-                return;
-            }
-            // 3
-            int available;
-            try {
-                available = Integer.parseInt(availStr.trim());
-            } catch (NumberFormatException e) {
-                //System.err.println("FAILED: Could not parse quantity string: '" + availStr + "'");
-                sendError(exchange, 500, "Upstream Data Error", requestBody);
-                return;
-            }
-            // 4. Business Logic: Stock Check
+
+            String availStr = getJsonValue(prodBody, "quantity");
+            int available = Integer.parseInt(availStr.trim());
+
             if (quantity > available) {
-                //System.out.println("DEBUG: Insufficient stock. Requested: " + quantity + ", Available: " + available);
                 sendError(exchange, 400, "{}\n", requestBody);
                 return;
             }
-            // 5. Database Persistence
+
             boolean success = DatabaseManager.placeOrder(
                     Integer.parseInt(productId),
                     Integer.parseInt(userId),
@@ -415,18 +398,15 @@ public class OrderHandler implements HttpHandler {
             );
 
             if (success) {
+                productInfoCache.remove(productId);
                 debugOrSend(exchange, 200, requestBody);
             } else {
                 sendError(exchange, 500, "Database Transaction Failed", requestBody);
             }
         } catch (Exception e) {
-            //System.err.println("!!! PlaceOrder Logic Failed !!!");
-            e.printStackTrace(); // This will tell you EXACTLY which line crashed
-            sendError(exchange, 400, "{}\n", requestBody);        }
-
+            sendError(exchange, 400, "{}\n", requestBody);
+        }
     }
-
-
 
 
     /**
