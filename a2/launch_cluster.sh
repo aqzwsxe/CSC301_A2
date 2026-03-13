@@ -53,8 +53,8 @@ case $HOSTNAME in
       start_service "OrderService.OrderService" 16001 0
       start_service "OrderService.OrderService" 16002 1
       ;;
-  "dh2026pc12")
-      echo "Host pc12 (142.1.46.15): Starting OrderServices 16003-16004..."
+  "dh2026pc15")
+      echo "Host pc15 (142.1.46.18): Starting OrderServices 16003-16004..."
       start_service "OrderService.OrderService" 16003 2
       start_service "OrderService.OrderService" 16004 3
       ;;
