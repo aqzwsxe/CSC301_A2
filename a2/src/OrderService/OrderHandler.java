@@ -184,7 +184,7 @@ public class OrderHandler implements HttpHandler {
                 forwardToService(exchange, target, path, requestBody);
             }
         } catch (Exception e) {
-            sendError(exchange, 400, "{}\n", requestBody);
+            sendError(exchange, 400, "Invalid Request", requestBody);
         }
     }
 
@@ -248,7 +248,7 @@ public class OrderHandler implements HttpHandler {
     private void handleGetOrder(HttpExchange exchange, String path, byte[] requestBody) throws IOException {
         String[] parts = path.split("/");
         if (parts.length < 3) {
-            sendError(exchange, 400, "{}\n", requestBody);
+            sendError(exchange, 400, "Invalid Request", requestBody);
             return;
         }
 
@@ -262,10 +262,10 @@ public class OrderHandler implements HttpHandler {
             if (order != null) {
                 debugOrSend(exchange, 200, order.toJson().getBytes(StandardCharsets.UTF_8));
             } else {
-                sendError(exchange, 404, "{}\n", requestBody);
+                sendError(exchange, 404, "Invalid Request", requestBody);
             }
         } catch (NumberFormatException e) {
-            sendError(exchange, 400, "{}\n", requestBody);
+            sendError(exchange, 400, "Invalid Request", requestBody);
         }
     }
 
@@ -286,19 +286,19 @@ public class OrderHandler implements HttpHandler {
     private void handleCancelOrder(HttpExchange exchange, String path, byte[] requestBody) throws IOException {
         String[] parts = path.split("/");
         if(parts.length < 3){
-            sendError(exchange, 400, "{}\n", requestBody);
+            sendError(exchange, 400, "Invalid Request", requestBody);
         }
 
         try {
             int orderId = Integer.parseInt(parts[2]);
             Order order = DatabaseManager.getOrderById(orderId);
             if(order==null){
-                sendError(exchange, 404, "{}\n", requestBody);
+                sendError(exchange, 404, "Invalid Request", requestBody);
                 return;
             }
 
             if ("Cancelled".equalsIgnoreCase(order.getStatus())){
-                sendError(exchange, 400, "{}\n", requestBody);
+                sendError(exchange, 400, "Invalid Request", requestBody);
                 return;
             }
             HttpResponse<String> prodRes = client.send(
@@ -319,11 +319,11 @@ public class OrderHandler implements HttpHandler {
                     sendError(exchange, 500, "Database Transaction Failed", requestBody);
                 }
             } else {
-                sendError(exchange, 404, "{}\n", requestBody);
+                sendError(exchange, 404, "Invalid Request", requestBody);
             }
         }catch (Exception e){
             String s1 = new String(requestBody);
-            sendError(exchange, 400, "{}\n", requestBody);
+            sendError(exchange, 400, "Invalid Request", requestBody);
         }
     }
 
@@ -351,7 +351,7 @@ public class OrderHandler implements HttpHandler {
             String quantityStr = getJsonValue(body, "quantity");
 
             if (userId == null || productId == null || quantityStr == null) {
-                sendError(exchange, 400, "{}\n", requestBody);
+                sendError(exchange, 400, "Invalid Request", requestBody);
                 return;
             }
             int quantity = Integer.parseInt(quantityStr);
@@ -363,7 +363,7 @@ public class OrderHandler implements HttpHandler {
                 if (userRes.statusCode() == 200) {
                     userCache.put(userId, true);
                 } else {
-                    sendError(exchange, 404, "{}\n", requestBody);
+                    sendError(exchange, 404, "Invalid Request", requestBody);
                     return;
                 }
             }
@@ -377,7 +377,7 @@ public class OrderHandler implements HttpHandler {
                     prodBody = prodRes.body();
                     productInfoCache.put(productId, prodBody);
                 } else {
-                    sendError(exchange, 404, "{}\n", requestBody);
+                    sendError(exchange, 404, "Invalid Request", requestBody);
                     return;
                 }
             }
@@ -385,8 +385,12 @@ public class OrderHandler implements HttpHandler {
             String availStr = getJsonValue(prodBody, "quantity");
             int available = Integer.parseInt(availStr.trim());
 
+            if (quantity<0){
+                sendError(exchange, 400, "Invalid Request", requestBody);
+                return;
+            }
             if (quantity > available) {
-                sendError(exchange, 400, "{}\n", requestBody);
+                sendError(exchange, 400, "Exceeded quantity limit", requestBody);
                 return;
             }
 
@@ -410,7 +414,7 @@ public class OrderHandler implements HttpHandler {
                 sendError(exchange, 500, "Database Transaction Failed", requestBody);
             }
         } catch (Exception e) {
-            sendError(exchange, 400, "{}\n", requestBody);
+            sendError(exchange, 400, "Invalid Request", requestBody);
         }
     }
 
@@ -447,7 +451,7 @@ public class OrderHandler implements HttpHandler {
      */
     private void sendError(HttpExchange exchange, int code, String message, byte[] requestBody) throws IOException {
         try {
-            String json = String.format("{\"status\": \"error\", \"message\": \"%s\"}\n", message);
+            String json = String.format("{\"status\": \"%s\"}\n", message);
             byte[] response = json.getBytes(StandardCharsets.UTF_8);
 
             exchange.getResponseHeaders().set("Content-Type", "application/json");
@@ -505,7 +509,7 @@ public class OrderHandler implements HttpHandler {
     private void handleUserPurchased(HttpExchange exchange, String path, byte[] requestBody) throws IOException {
         String[] parts = path.split("/");
         if(parts.length < 4){
-            sendError(exchange, 400, "{}\n", requestBody);
+            sendError(exchange, 400, "Invalid Request", requestBody);
             return;
         }
 
@@ -514,7 +518,7 @@ public class OrderHandler implements HttpHandler {
             int userId = Integer.parseInt(userIdStr);
 
             if(!userExists(userIdStr)){
-                sendError(exchange, 404, "{}\n", requestBody);
+                sendError(exchange, 404, "Invalid Request", requestBody);
                 return;
             }
             // Aggregate purchases
@@ -523,7 +527,7 @@ public class OrderHandler implements HttpHandler {
             debugOrSend(exchange, 200, jsonResponse.getBytes(StandardCharsets.UTF_8));
         }catch (NumberFormatException e){
             String s1 = new String(requestBody);
-            sendError(exchange, 400, "{}\n", requestBody);
+            sendError(exchange, 400, "Invalid Request", requestBody);
         }catch (Exception e){
             String s1 = new String(requestBody);
             sendError(exchange, 500, "Internal Server Error",requestBody);
