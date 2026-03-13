@@ -9,7 +9,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
-import io.javalin.Javalin;
+import io.javalin.Javalin;import org.eclipse.jetty.util.thread.QueuedThreadPool;
 
 // To run this loadBalancer: java -jar target/A2_Project-1.0-SNAPSHOT-jar-with-dependencies.jar
 public class LoadBalancer {
@@ -24,7 +24,6 @@ public class LoadBalancer {
         String configPath = (args.length > 0) ? args[0] : "config.json";
 
         try {
-            // 3. Dynamically load the pool (IPs AND Ports correctly paired)
             orderServicePool = ConfigReader.getServicePool(configPath, "OrderService");
             System.out.println("Load Balancer initialized with " + orderServicePool.size() + " targets.");
         } catch (Exception e) {
@@ -33,7 +32,12 @@ public class LoadBalancer {
         }
 
         int lbPort = 18001;
-        Javalin app = Javalin.create().start("0.0.0.0", lbPort);
+        Javalin app = Javalin.create(config -> {
+            QueuedThreadPool threadPool = new QueuedThreadPool();
+            threadPool.setVirtualThreadsExecutor(Executors.newVirtualThreadPerTaskExecutor());
+            threadPool.setMaxThreads(500);
+            config.jetty.threadPool = threadPool;
+        }).start("0.0.0.0", lbPort);
 
         app.get("/*", ctx -> handleProxy(ctx));
         app.post("/*", ctx -> handleProxy(ctx));
