@@ -8,17 +8,29 @@ import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 
 public class DatabaseManager {
     private static String dbUrl = "jdbc:postgresql://142.1.46.8:5432/mydb";
-    private static Connection connection;
+    private static final HikariDataSource dataSource;
 
-    private static synchronized Connection getConnection() throws SQLException{
-        Properties props = new Properties();
-        props.setProperty("user", "postgres");
-        props.setProperty("password", "password123");
-        // Do NOT store this in a static variable
-        return DriverManager.getConnection(dbUrl, props);
+    static {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(dbUrl);
+        config.setUsername("postgres");
+        config.setPassword("password123");
+
+        config.setMaximumPoolSize(20); // Up to 20 concurrent physical connections
+        config.setMinimumIdle(5);
+        config.setConnectionTimeout(30000); // 30 seconds
+        config.setIdleTimeout(600000);
+
+        dataSource = new HikariDataSource(config);
+    }
+
+    public static Connection getConnection() throws SQLException {
+        return dataSource.getConnection();
     }
 
     public static boolean isDatabaseHealthy(){
