@@ -12,7 +12,7 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
 public class DatabaseManager {
-    private static String dbUrl = "jdbc:postgresql://142.1.46.8:5432/mydb";
+    private static String dbUrl = "jdbc:postgresql://142.1.114.76:5432/mydb";
     private static final HikariDataSource dataSource;
 
     static {
