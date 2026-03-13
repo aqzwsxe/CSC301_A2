@@ -130,4 +130,20 @@ async def main():
     headers = {"Content-Type": "application/json"}
     async with aiohttp.ClientSession(connector=connector, headers=headers) as session:
         # Step 1: Prep
-        await clear_database(session
+        await clear_database(session)
+        await setup_data(session)
+
+        if not VALID_USERS or not VALID_PRODUCTS:
+            print("Error: Could not populate data. Verify DB IP 142.1.114.76:8888.")
+            return
+
+        # Step 2: Stress
+        print(f"Action: Starting Load Test ({CONCURRENCY} workers)...")
+        workers = [asyncio.create_task(worker(session)) for _ in range(CONCURRENCY)]
+        await monitor()
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nTest stopped by user.")
